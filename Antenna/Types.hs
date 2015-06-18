@@ -1,30 +1,31 @@
-{-# LANGUAGE TemplateHaskell   #-}
-module Antenna.Types 
-    ( AppState
-    , insertListener
-    , removeListener
-    , initialState
-    ) where
+{-# LANGUAGE TemplateHaskell #-}
+module Antenna.Types where
 
 import Control.Lens
-import Data.HashMap.Strict                           ( HashMap, insert, delete, empty )
 import Data.Text                                     ( Text )
-import Network.WebSockets
+import Database.Persist.Sql
+import Web.Simple
 
-type ListenerMap = HashMap Text Connection 
+data Node = Node
+    { _nodeId  :: Int
+    , _name    :: Text
+    , _targets :: [Text]
+    } deriving (Show)
 
-data AppState = AppState 
-    { _listeners :: ListenerMap 
-    } 
+data Transaction = Transaction
+    { _transactionId :: Int
+    , _upAction      :: Text
+    , _downAction    :: Text
+    , _timestamp     :: Int
+    , _range         :: [Text]
+    } deriving (Show)
+
+$(makeLenses ''Node)
+$(makeLenses ''Transaction)
+
+data AppState = AppState { _sqlPool :: ConnectionPool } 
 
 $(makeLenses ''AppState)
 
-insertListener :: Text -> Connection -> AppState -> AppState
-insertListener node = over listeners . insert node 
-
-removeListener :: Text -> AppState -> AppState
-removeListener = over listeners . delete 
-
-initialState :: AppState
-initialState = AppState empty
+type AppController = Controller AppState
 
