@@ -2,13 +2,18 @@
 module Antenna.Types where
 
 import Control.Lens
+import Crypto.PasswordStore
 import Data.Text                                     ( Text )
 import Database.Persist.Sql
 import Web.Simple
 
+data NodeType = Device | Virtual
+    deriving (Show, Read)
+
 data Node = Node
     { _nodeId  :: Int
     , _name    :: Text
+    , _family  :: NodeType
     , _targets :: [Text]
     } deriving (Show)
 
@@ -23,7 +28,10 @@ data Transaction = Transaction
 $(makeLenses ''Node)
 $(makeLenses ''Transaction)
 
-data AppState = AppState { _sqlPool :: ConnectionPool } 
+data AppState = AppState 
+    { _sqlPool :: ConnectionPool 
+    , _salt    :: Salt
+    } 
 
 $(makeLenses ''AppState)
 

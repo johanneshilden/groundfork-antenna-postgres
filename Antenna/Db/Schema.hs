@@ -1,12 +1,16 @@
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE GADTs                      #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
+{-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE QuasiQuotes                #-}
 {-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE TypeFamilies               #-}
 module Antenna.Db.Schema 
-    ( getNodes 
+    ( NewNode(..)
+    , SqlT
+    , getNodes 
     , getTransactionsPage 
     , getTransactionsGte 
     , insertNode 
@@ -15,16 +19,28 @@ module Antenna.Db.Schema
     , insertTransaction 
     , addToTransactionRange 
     , countNodes
+    , getNodeCount
+    , deleteAllTransactions
+    , lookupDevice
+    , insertDevice
+    , selectNodeByName
+    , getNodeByName
     , migrateAll
     ) where
 
-import Control.Applicative                           ( (<$>) )
+import Control.Monad.IO.Class                        ( liftIO )
+
+import Control.Applicative                           ( (<$>), (<*>) )
 import Control.Lens                                  ( Cons, Setting, set, over, cons, at, (?~), (%~), (&) )
 import Control.Monad                                 ( liftM )
 import Control.Monad.Logger
 import Control.Monad.Trans.Resource
+import Crypto.PasswordStore
 import Data.Map.Strict                               ( Map, empty, keys, elems )
+import Data.Maybe                                    ( listToMaybe )
 import Data.Text                                     ( Text )
+import Data.Text.Encoding                            ( encodeUtf8, decodeUtf8 )
+import Data.Traversable                              ( sequence )
 import Database.Esqueleto
 import Database.Persist                              ( selectList )
 import Database.Persist.TH
@@ -32,13 +48,20 @@ import Database.Persist.TH
 import qualified Antenna.Types                    as T 
 import qualified Data.Map.Strict                  as MapS
 
+import Prelude                                hiding ( sequence )
+
 share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistLowerCase|
     Node 
         name           Text
+        family         Text
         deriving Eq Show
     Target 
         nodeId         NodeId 
         key            NodeId 
+        deriving Eq Show
+    Device 
+        nodeId         NodeId 
+        secret         Text
         deriving Eq Show
     Transaction
         nodeId         NodeId
@@ -58,6 +81,14 @@ type Timestamp = Int
 unKey :: (ToBackendKey SqlBackend a) => Key a -> Int
 unKey = fromIntegral . unSqlBackendKey . toBackendKey 
 
+toText :: T.NodeType -> Text
+toText T.Virtual = "virtual"
+toText _________ = "device"
+
+toType :: Text -> T.NodeType
+toType "virtual" = T.Virtual
+toType _________ = T.Device
+
 injectKeys :: Monad m => [a] -> (a -> Map k b -> Map k b) -> (c -> Map k b -> Map k b) -> [c] -> m [b]
 injectKeys items construct insert = 
     let init = foldr construct empty items 
@@ -69,36 +100,64 @@ selectNodes = select $ from $
         orderBy [asc (node ^. NodeId)]
         return node
  
-selectNodeTargets :: [Key Node] -> SqlT [(Entity Target, Entity Node)]
-selectNodeTargets nodes = select $ from $
+selectNodeTargets :: Key Node -> SqlT [(Entity Target, Entity Node)]
+selectNodeTargets nodeId = select $ from $
     \(target `InnerJoin` node) -> do
-        on (target ^. TargetNodeId ==. node ^. NodeId)
+        on (target ^. TargetKey ==. node ^. NodeId)
+        where_ $ target ^. TargetNodeId ==. val nodeId
+        return (target, node)
+
+selectNodeTargetsIn :: [Key Node] -> SqlT [(Entity Target, Entity Node)]
+selectNodeTargetsIn nodes = select $ from $
+    \(target `InnerJoin` node) -> do
+        on (target ^. TargetKey ==. node ^. NodeId)
         where_ $ target ^. TargetNodeId `in_` valList nodes
         return (target, node)
- 
+
+getNodes :: SqlT [T.Node]
+getNodes = do
+    nodes <- selectNodes
+    nodeTargets <- selectNodeTargetsIn (entityKey <$> nodes)
+    injectKeys nodes construct insert nodeTargets 
+  where
+    construct node = 
+        let key = entityKey node
+            val = entityVal node
+         in MapS.insert key T.Node 
+                { T._nodeId  = unKey key
+                , T._name    = val & nodeName
+                , T._family  = toType (val & nodeName)
+                , T._targets = [] }
+    insert (target,node) = 
+        let name = nodeName (entityVal node)
+            targetId = entityVal target & targetNodeId
+         in MapS.update (Just . over T.targets (cons name)) targetId
+
 selectNodeByName :: Text -> SqlT (Maybe (Entity Node))
 selectNodeByName name = do
     result <- select $ from $ 
         \node -> do
             where_ $ node ^. NodeName ==. val name
             return node
-    return $ case result of
-      (node:_) -> Just node
-      _ -> Nothing
+    return (listToMaybe result)
 
-getNodes :: SqlT [T.Node]
-getNodes = do
-    nodes <- selectNodes
-    nodeTargets <- selectNodeTargets (entityKey <$> nodes)
-    injectKeys nodes construct insert nodeTargets 
+getNodeByName :: Text -> SqlT (Maybe T.Node)
+getNodeByName name = do
+    maybeNode <- selectNodeByName name
+    sequence $ translate <$> maybeNode
   where
-    construct node = 
+    translate :: Entity Node -> SqlT T.Node
+    translate node = do
         let key = entityKey node
             val = entityVal node
-         in MapS.insert key $ T.Node (unKey key) (val & nodeName) []
-    insert (_,node) = 
-        let name = nodeName (entityVal node)
-         in MapS.update (Just . over T.targets (cons name)) (entityKey node) 
+        targets <- selectNodeTargets key
+        liftIO $ print targets
+        return T.Node 
+            { T._nodeId  = unKey key
+            , T._name    = val & nodeName
+            , T._family  = toType (val & nodeName)
+            , T._targets = nodeName . entityVal . snd <$> targets 
+            }
 
 selectTransactionsPage :: Int -> Int -> SqlT [Entity Transaction]
 selectTransactionsPage offs lim = 
@@ -155,12 +214,27 @@ countNodes name =
         where_ (node ^. NodeName ==. val name)
         return countRows
 
-insertNode :: Text -> SqlT (Maybe (Key Node))
-insertNode name = do
-    count <- countNodes name
+getNodeCount :: SqlT Int
+getNodeCount = 
+    select (from nodes) >>= \case
+      [Value n] -> return n
+      _________ -> error "SQL error."
+  where
+    nodes :: Num a => SqlExpr (Entity Node) -> SqlQuery (SqlExpr (Value a))
+    nodes = const (return countRows)
+
+data NewNode = NewNode
+    { newName   :: Text
+    , newFamily :: T.NodeType }
+
+insertNode :: NewNode -> SqlT (Maybe (Key Node))
+insertNode node = do
+    count <- countNodes (node & newName)
     case count of
       [Value 0] -> do
-          newNodeId <- insert $ Node name
+          newNodeId <- insert $ Node 
+            (node & newName) 
+            (toText $ node & newFamily) 
           insertSelect $ from $ \node -> 
               return $ Target <# val newNodeId <&> (node ^. NodeId)
           return $ Just newNodeId
@@ -208,4 +282,39 @@ addToTransactionRange transactionId nodeName = do
       Just node -> do
         let nodeKey = entityKey node
         liftM Just $ insert $ Range transactionId nodeKey
+
+type Delete a = SqlExpr (Entity a) -> SqlQuery ()
+
+deleteAllTransactions :: SqlT ()
+deleteAllTransactions = 
+    delete (from range) >> delete (from transaction)
+  where
+    range :: Delete Range
+    range _ = return ()
+    transaction :: Delete Transaction
+    transaction _ = return ()
+
+lookupDevice :: Text -> Text -> Salt -> SqlT Bool
+lookupDevice user pass salt = query >>= \case 
+    [Value 1] -> return True
+    _________ -> return False
+  where
+    query :: SqlT [Value Int]
+    query = select $ from $
+        \(node `InnerJoin` device) -> do
+            on (node ^. NodeId ==. device ^. DeviceNodeId)
+            where_ $ node ^. NodeName ==. val user &&. device ^. DeviceSecret ==. val secret
+            return countRows
+    secret = decodeUtf8 $ makePasswordSalt (encodeUtf8 pass) salt 17
+
+insertDevice :: Text -> Text -> Salt -> SqlT (Maybe (Key Device))
+insertDevice user plaintext salt = do
+    maybeNodeId <- insertNode $ NewNode user T.Device
+    case maybeNodeId of
+      Just key -> do
+        deviceId <- insert (Device key secret) 
+        return (Just deviceId)
+      Nothing -> return Nothing
+  where
+    secret = decodeUtf8 $ makePasswordSalt (encodeUtf8 plaintext) salt 17
 

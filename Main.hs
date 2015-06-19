@@ -2,10 +2,13 @@
 module Main where
 
 import Antenna.Core
+import Antenna.Db.Schema
+import Antenna.Tests
 import Control.Applicative
 import Control.Arrow                                 ( (***) )
 import Control.Lens
 import Control.Monad                                 ( liftM, void )
+import Crypto.PasswordStore
 import Database.Persist.Postgresql
 import Network.Wai
 import Network.Wai.Handler.Warp
@@ -26,17 +29,23 @@ corsPolicy = const $ Just $ simpleCorsResourcePolicy
 
 main :: IO ()
 main = do
+    runTests 
+    (state, settings) <- appSetup
+    runSettings settings 
+        $ cors corsPolicy 
+        $ websocketsOr defaultConnectionOptions (wsApp state) (waiApp state)
+
+appSetup :: IO (AppState, Settings)
+appSetup = do
     port <- read <$> getEnvDefault "PORT" "3333"
     -- herokuParams <- dbConnParams
     -- let opts = (Text.unpack *** Text.unpack) <$> herokuParams
     pool <- inIO $ createPostgresqlPool (connectionStr opts) 10
-    let state = AppState pool 
-    let settings = defaultSettings 
-            & setPort port
-            & setInstallShutdownHandler (void . signalHandlers)
-    runSettings settings 
-        $ cors corsPolicy 
-        $ websocketsOr defaultConnectionOptions (wsApp state) (waiApp state)
+    runDb pool $ runMigration migrateAll
+    let state = AppState pool (makeSalt "Mxg4YN0OaE3xaehmg3up")
+    let settings = defaultSettings & setPort port
+                                   & setInstallShutdownHandler (void . signalHandlers)
+    return (state, settings)
   where
     signalHandlers onClose = do
         installHandler sigTERM (Catch $ term onClose) (Just fullSignalSet)
@@ -50,5 +59,6 @@ opts :: [(String, String)]
 opts = [ ("host"     , "localhost")
        , ("user"     , "antenna")
        , ("password" , "antenna")
-       , ("dbname"   , "antenna")
-       ]
+       , ("dbname"   , "antenna") ]
+
+
