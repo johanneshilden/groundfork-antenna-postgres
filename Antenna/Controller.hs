@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Antenna.Controller 
     ( controller
+    , okResponse
     ) where
 
 import Antenna.Db                                    ( runDb )
@@ -12,6 +13,8 @@ import Control.Monad                                 ( join )
 import Control.Monad.Trans                           ( liftIO )
 import Crypto.PasswordStore
 import Data.Aeson
+import Data.Aeson.Lens
+import Data.HashMap.Strict                           ( HashMap, fromList )
 import Data.Maybe                                    ( fromMaybe, maybeToList )
 import Data.Text                                     ( Text )
 import Data.Text.Encoding
@@ -19,6 +22,7 @@ import Data.Traversable                              ( sequence )
 import Database.Persist.Postgresql                   ( ConnectionPool )
 import Network.HTTP.Types
 import Network.Wai.Middleware.HttpAuth
+import Text.Read                                     ( readMaybe )
 import Web.Frank
 import Web.Simple
 
@@ -36,7 +40,6 @@ data OkResponse = JsonOk (Maybe Value)
 data ErrorResponse = JsonError Text
     deriving (Show)
 
-
 instance ToJSON OkResponse where
     toJSON (JsonOk body) = object $ 
         [ ("status"  , "success")
@@ -49,6 +52,9 @@ instance ToJSON ErrorResponse where
     toJSON (JsonError code) = object
         [ ("status" , "error")
         , ("error"  , String code) ]
+
+okResponse :: Object -> OkResponse
+okResponse = JsonOk . Just . Object  
 
 authenticate :: (Node -> AppController ()) -> AppController ()
 authenticate action = do
@@ -76,29 +82,32 @@ credentials request = do
 controller :: AppController ()
 controller = do
     state <- controllerState
+    let runQuery = liftIO . runDb (state ^. sqlPool)
 
     get "ping" $ respond (responseLBS status200 [] "Pong!")
 
     authenticate $ \_ -> do
 
         get "nodes" $ do
-            nodes <- liftIO $ runDb (state ^. sqlPool) getNodes
+            nodes <- runQuery getNodes
             respondWith status200 nodes
 
         post "nodes" $ do
             req  <- request
             body <- liftIO $ strictRequestBody req
-            undefined
+            case decode body of
+              Just (Object o) -> processNewNode o
+              _______________ -> respondWith status400 (JsonError "BAD_REQUEST")
 
         put "nodes/:name" $ do
-            name <- liftA (fromMaybe "") (queryParam "name")
+            --name <- liftA (fromMaybe "") (queryParam "name")
             req  <- request
             body <- liftIO $ strictRequestBody req
             undefined
 
         delete "nodes/:name" $ do
             name <- liftA (fromMaybe "") (queryParam "name")
-            liftIO $ runDb (state ^. sqlPool) $ deleteNode name
+            runQuery (deleteNode name)
             respondWith status200 (JsonOk Nothing)
 
         post "sync" $ do
@@ -107,11 +116,41 @@ controller = do
             undefined
 
         get "log" $ do
-            nodes <- liftIO $ runDb (state ^. sqlPool) getNodes
-            respondWith status200 nodes
+            page <- liftA (numeric  1) (queryParam "page")
+            size <- liftA (numeric 25) (queryParam "size")
+            let offs = (page - 1) * size
+            transactions <- runQuery $ getTransactionsPage offs size
+            respondWith status200 transactions
 
-        post "reset" $ do
-            undefined
+        post "log/reset" $ do
+            runQuery deleteAllTransactions
+            respondWith status200 (JsonOk Nothing)
 
     respondWith status404 (JsonError "NOT_FOUND")
+
+numeric :: Int -> Maybe String -> Int
+numeric def = fromMaybe def . join . fmap readMaybe 
+
+processNewNode :: HashMap Text Value -> AppController ()
+processNewNode object = do
+    app <- controllerState
+    case buildNode (app ^. salt) of
+      Nothing -> respondWith status400 (JsonError "BAD_REQUEST")
+      Just newNode -> do
+        response <- liftIO . runDb (app ^. sqlPool) $ insertNode newNode
+        case response of
+          InsertSuccess key -> respondWith status200 (okResponse $ idResponse key)
+          InsertConflict    -> respondWith status409 (JsonError "CONFLICT")
+          InsertBadRequest  -> respondWith status400 (JsonError "BAD_REQUEST")
+  where
+    idResponse key = fromList [("id", Number $ fromIntegral $ unKey key)]
+    buildNode salt = do
+        nodeName <- object ^? ix "name" ._String
+        nodeType <- object ^? ix "type" ._String
+        case nodeType of
+          "device" -> do
+            pass <- object ^? ix "device" ._String
+            return $ NewNode nodeName Device $ Just (pass, salt)
+          "virtual" -> 
+            return $ NewNode nodeName Virtual Nothing
 

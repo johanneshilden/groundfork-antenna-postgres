@@ -10,6 +10,7 @@
 module Antenna.Db.Schema 
     ( NewNode(..)
     , SqlT
+    , ResultInsert(..)
     , addToTransactionRange 
     , countNodes
     , deleteAllTransactions
@@ -20,35 +21,35 @@ module Antenna.Db.Schema
     , getTransactionsGte 
     , getTransactionsPage 
     , hasDevice
-    , insertDevice
     , insertNode 
     , insertTransaction 
     , lookupDevice
     , migrateAll
     , selectNodeByName
     , setNodeTargets 
+    , unKey
     ) where
 
 import Control.Monad.IO.Class                        ( liftIO )
 
 import Control.Applicative                           ( (<$>), (<*>) )
 import Control.Lens                                  ( Cons, Setting, set, over, cons, at, (?~), (%~), (&) )
-import Control.Monad                                 ( liftM )
+import Control.Monad                                 ( liftM, when, void )
 import Control.Monad.Logger
 import Control.Monad.Trans.Resource
 import Crypto.PasswordStore
 import Data.Map.Strict                               ( Map, empty, keys, elems )
-import Data.Maybe                                    ( listToMaybe )
+import Data.Maybe                                    ( listToMaybe, fromJust, isNothing )
 import Data.Text                                     ( Text )
 import Data.Text.Encoding                            ( encodeUtf8, decodeUtf8 )
 import Data.Traversable                              ( sequence )
-import Database.Esqueleto
 import Database.Persist                              ( selectList )
 import Database.Persist.TH
 
 import qualified Antenna.Types                    as T 
 import qualified Data.Map.Strict                  as MapS
 
+import Database.Esqueleto                     hiding ( isNothing )
 import Prelude                                hiding ( sequence )
 
 share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistLowerCase|
@@ -78,6 +79,11 @@ share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistLowerCase|
 
 type SqlT = SqlPersistT (ResourceT (NoLoggingT IO))
 type Timestamp = Int
+
+data ResultInsert a
+  = InsertSuccess (Key a)
+  | InsertConflict 
+  | InsertBadRequest
 
 unKey :: (ToBackendKey SqlBackend a) => Key a -> Int
 unKey = fromIntegral . unSqlBackendKey . toBackendKey 
@@ -216,20 +222,27 @@ getNodeCount =
 
 data NewNode = NewNode
     { newName   :: Text
-    , newFamily :: T.NodeType }
+    , newFamily :: T.NodeType 
+    , newPass   :: Maybe (Text, Salt)
+    }
 
-insertNode :: NewNode -> SqlT (Maybe (Key Node))
-insertNode node = do
-    count <- countNodes (node & newName)
-    case count of
-      [Value 0] -> do
-          newNodeId <- insert $ Node 
-            (node & newName) 
-            (T.toText $ node & newFamily) 
-          insertSelect $ from $ \node -> 
-              return $ Target <# val newNodeId <&> (node ^. NodeId)
-          return $ Just newNodeId
-      _ -> return Nothing  -- A node with the provided name already exists
+insertNode :: NewNode -> SqlT (ResultInsert Node)
+insertNode node 
+    | isDevice && isNothing (node & newPass) = return InsertBadRequest
+    | otherwise = countNodes nodeName >>= go
+  where
+    nodeName = node & newName
+    isDevice = T.Device == (node & newFamily)
+    go [Value 0] = do
+        key <- insert $ Node nodeName (T.toText $ node & newFamily)
+        insertSelect $ from $ \node -> 
+            return $ Target <# val key <&> (node ^. NodeId)
+        when isDevice $ 
+            let (plaintext, salt) = fromJust (node & newPass)
+                secret = makePwd plaintext salt
+             in void $ insert (Device key secret) 
+        return (InsertSuccess key)
+    go _ = return InsertConflict -- A node with the given name already exists
 
 deleteNode :: Text -> SqlT ()
 deleteNode name = do
@@ -308,14 +321,4 @@ hasDevice name pass salt = query >>= \case
             where_ $ node ^. NodeName ==. val name &&. device ^. DeviceSecret ==. val secret
             return countRows
     secret = makePwd pass salt
-
-insertDevice :: Text -> Text -> Salt -> SqlT (Maybe (Key Device))
-insertDevice name plaintext salt = do
-    let secret = makePwd plaintext salt
-    maybeNodeId <- insertNode $ NewNode name T.Device
-    case maybeNodeId of
-      Just key -> do
-        deviceId <- insert (Device key secret) 
-        return (Just deviceId)
-      Nothing -> return Nothing
 

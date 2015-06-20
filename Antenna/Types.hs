@@ -10,7 +10,7 @@ import Database.Persist.Sql
 import Web.Simple
 
 data NodeType = Device | Virtual
-    deriving (Show, Read)
+    deriving (Show, Read, Eq)
 
 toText :: NodeType -> Text
 toText Virtual = "virtual"
@@ -53,5 +53,14 @@ instance ToJSON Node where
         , "name"    .= (node & _name) 
         , "type"    .= toText (node & _family) 
         , "targets" .= (node & _targets) 
+        ]
+
+instance ToJSON Transaction where
+    toJSON t = object
+        [ "id"        .= (t & _transactionId)
+        , "up"        .= (t & _upAction) 
+        , "down"      .= (t & _downAction)
+        , "timestamp" .= (t & _timestamp)
+        , "range"     .= (t & _range)
         ]
 

@@ -34,8 +34,8 @@ runTests = do
         rawExecute "DELETE FROM target"      [ ]
         rawExecute "DELETE FROM node"        [ ]
 
-        insertDevice "alice" "xxx" salt
-        insertDevice "bob" "bob" salt
+        insertNode $ NewNode "alice" Device $ Just ("xxx", salt)
+        insertNode $ NewNode "bob"   Device $ Just ("bob", salt)
     
         setNodeTargets "alice" ["bob"]
         setNodeTargets "bob" ["alice"]
@@ -63,7 +63,7 @@ runTests = do
         hasd <- hasDevice "bob" "bob" salt 
         assert (not hasd) "Test 8" "Expected hasDevice 'bob' 'bob' == False, instead got True"
 
-        insertDevice "bob" "bob" salt
+        insertNode $ NewNode "bob" Device $ Just ("bob", salt)
 
         return ()
 
