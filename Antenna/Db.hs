@@ -1,4 +1,7 @@
-module Antenna.Db where
+module Antenna.Db 
+    ( inIO
+    , runDb
+    ) where
 
 import Control.Monad.Trans.Resource
 import Database.Persist.Postgresql

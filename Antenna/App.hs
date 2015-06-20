@@ -1,4 +1,6 @@
-module Antenna.App where
+module Antenna.App 
+    ( waiApp
+    ) where
 
 import Antenna.Controller
 import Antenna.Types

@@ -5,5 +5,6 @@ import Network.WebSockets
 
 wsApp :: AppState -> PendingConnection -> IO ()
 wsApp state pending = 
+    -- @todo
     return ()
 

@@ -1,14 +1,24 @@
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TemplateHaskell   #-}
 module Antenna.Types where
 
-import Control.Lens
+import Control.Lens                                  ( makeLenses, (&) )
 import Crypto.PasswordStore
+import Data.Aeson
 import Data.Text                                     ( Text )
 import Database.Persist.Sql
 import Web.Simple
 
 data NodeType = Device | Virtual
     deriving (Show, Read)
+
+toText :: NodeType -> Text
+toText Virtual = "virtual"
+toText _______ = "device"
+
+toType :: Text -> NodeType
+toType "virtual" = Virtual
+toType _________ = Device
 
 data Node = Node
     { _nodeId  :: Int
@@ -36,4 +46,12 @@ data AppState = AppState
 $(makeLenses ''AppState)
 
 type AppController = Controller AppState
+
+instance ToJSON Node where
+    toJSON node = object
+        [ "id"      .= (node & _nodeId)
+        , "name"    .= (node & _name) 
+        , "type"    .= toText (node & _family) 
+        , "targets" .= (node & _targets) 
+        ]
 

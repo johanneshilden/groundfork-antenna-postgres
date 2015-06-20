@@ -34,20 +34,29 @@ runTests = do
         rawExecute "DELETE FROM target"      [ ]
         rawExecute "DELETE FROM node"        [ ]
 
-        insertDevice "alice" "alice" salt
+        insertDevice "alice" "xxx" salt
         insertDevice "bob" "bob" salt
     
-        replaceNodeTargets "alice" ["bob"]
-        replaceNodeTargets "bob" ["alice"]
+        setNodeTargets "alice" ["bob"]
+        setNodeTargets "bob" ["alice"]
 
         nodeCount <- getNodeCount
         assert (nodeCount == 2) "Test 1" ("Expected getNodeCount == 2, instead got " ++ show nodeCount)
 
         maybeNode <- getNodeByName "alice"
-        liftIO $ print maybeNode
+        assert (_name `fmap` maybeNode == Just "alice") "Test 2" ("Expected (Just 'alice'), instead got " ++ show (_name `fmap` maybeNode))
+        assert (_targets `fmap` maybeNode == Just ["bob"]) "Test 3" ("Expected (Just '[\"bob\"]'), instead got " ++ show (_targets `fmap` maybeNode))
 
-        nodes <- getNodes
-        liftIO $ print nodes
+        hasd <- hasDevice "alice" "xxx" salt 
+        assert hasd "Test 4" "Expected hasDevice 'alice' 'xxx' == True, instead got False"
+
+        hasd <- hasDevice "alice" "pogostick" salt 
+        assert (not hasd) "Test 5" "Expected hasDevice 'alice' 'pogostick' == False, instead got True"
+
+        hasd <- hasDevice "what" "not" salt 
+        assert (not hasd) "Test 6" "Expected hasDevice 'what' 'not' == False, instead got True"
+
+
 
   where
     connectionStr = C8.pack $ unwords [ key ++ "=" ++ val | (key, val) <- testOpts ]

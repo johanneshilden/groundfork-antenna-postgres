@@ -10,22 +10,23 @@
 module Antenna.Db.Schema 
     ( NewNode(..)
     , SqlT
-    , getNodes 
-    , getTransactionsPage 
-    , getTransactionsGte 
-    , insertNode 
-    , deleteNode 
-    , replaceNodeTargets 
-    , insertTransaction 
     , addToTransactionRange 
     , countNodes
-    , getNodeCount
     , deleteAllTransactions
-    , lookupDevice
-    , insertDevice
-    , selectNodeByName
+    , deleteNode 
     , getNodeByName
+    , getNodeCount
+    , getNodes 
+    , getTransactionsGte 
+    , getTransactionsPage 
+    , hasDevice
+    , insertDevice
+    , insertNode 
+    , insertTransaction 
+    , lookupDevice
     , migrateAll
+    , selectNodeByName
+    , setNodeTargets 
     ) where
 
 import Control.Monad.IO.Class                        ( liftIO )
@@ -81,14 +82,6 @@ type Timestamp = Int
 unKey :: (ToBackendKey SqlBackend a) => Key a -> Int
 unKey = fromIntegral . unSqlBackendKey . toBackendKey 
 
-toText :: T.NodeType -> Text
-toText T.Virtual = "virtual"
-toText _________ = "device"
-
-toType :: Text -> T.NodeType
-toType "virtual" = T.Virtual
-toType _________ = T.Device
-
 injectKeys :: Monad m => [a] -> (a -> Map k b -> Map k b) -> (c -> Map k b -> Map k b) -> [c] -> m [b]
 injectKeys items construct insert = 
     let init = foldr construct empty items 
@@ -126,7 +119,7 @@ getNodes = do
          in MapS.insert key T.Node 
                 { T._nodeId  = unKey key
                 , T._name    = val & nodeName
-                , T._family  = toType (val & nodeName)
+                , T._family  = T.toType (val & nodeName)
                 , T._targets = [] }
     insert (target,node) = 
         let name = nodeName (entityVal node)
@@ -151,13 +144,11 @@ getNodeByName name = do
         let key = entityKey node
             val = entityVal node
         targets <- selectNodeTargets key
-        liftIO $ print targets
         return T.Node 
             { T._nodeId  = unKey key
             , T._name    = val & nodeName
-            , T._family  = toType (val & nodeName)
-            , T._targets = nodeName . entityVal . snd <$> targets 
-            }
+            , T._family  = T.toType (val & nodeName)
+            , T._targets = nodeName . entityVal . snd <$> targets }
 
 selectTransactionsPage :: Int -> Int -> SqlT [Entity Transaction]
 selectTransactionsPage offs lim = 
@@ -234,7 +225,7 @@ insertNode node = do
       [Value 0] -> do
           newNodeId <- insert $ Node 
             (node & newName) 
-            (toText $ node & newFamily) 
+            (T.toText $ node & newFamily) 
           insertSelect $ from $ \node -> 
               return $ Target <# val newNodeId <&> (node ^. NodeId)
           return $ Just newNodeId
@@ -251,8 +242,8 @@ deleteNode name = do
     delete $ from $ \node ->
         where_ $ node ^. NodeId `in_` nodeKeyList
 
-replaceNodeTargets :: Text -> [Text] -> SqlT ()
-replaceNodeTargets nodeName targets = do
+setNodeTargets :: Text -> [Text] -> SqlT ()
+setNodeTargets nodeName targets = do
     maybeNode <- selectNodeByName nodeName
     case maybeNode of
       Nothing -> return ()
@@ -294,8 +285,17 @@ deleteAllTransactions =
     transaction :: Delete Transaction
     transaction _ = return ()
 
-lookupDevice :: Text -> Text -> Salt -> SqlT Bool
-lookupDevice user pass salt = query >>= \case 
+makePwd :: Text -> Salt -> Text
+makePwd pass salt = decodeUtf8 $ makePasswordSalt (encodeUtf8 pass) salt 17
+
+lookupDevice :: Text -> Text -> Salt -> SqlT (Maybe T.Node)
+lookupDevice name pass salt = hasDevice name pass salt >>= \exists -> 
+    if exists 
+        then getNodeByName name
+        else return Nothing
+
+hasDevice :: Text -> Text -> Salt -> SqlT Bool
+hasDevice name pass salt = query >>= \case 
     [Value 1] -> return True
     _________ -> return False
   where
@@ -303,18 +303,17 @@ lookupDevice user pass salt = query >>= \case
     query = select $ from $
         \(node `InnerJoin` device) -> do
             on (node ^. NodeId ==. device ^. DeviceNodeId)
-            where_ $ node ^. NodeName ==. val user &&. device ^. DeviceSecret ==. val secret
+            where_ $ node ^. NodeName ==. val name &&. device ^. DeviceSecret ==. val secret
             return countRows
-    secret = decodeUtf8 $ makePasswordSalt (encodeUtf8 pass) salt 17
+    secret = makePwd pass salt
 
 insertDevice :: Text -> Text -> Salt -> SqlT (Maybe (Key Device))
-insertDevice user plaintext salt = do
-    maybeNodeId <- insertNode $ NewNode user T.Device
+insertDevice name plaintext salt = do
+    let secret = makePwd plaintext salt
+    maybeNodeId <- insertNode $ NewNode name T.Device
     case maybeNodeId of
       Just key -> do
         deviceId <- insert (Device key secret) 
         return (Just deviceId)
       Nothing -> return Nothing
-  where
-    secret = decodeUtf8 $ makePasswordSalt (encodeUtf8 plaintext) salt 17
 
