@@ -47,5 +47,5 @@ opts :: [(String, String)]
 opts = [ ("host"     , "localhost")
        , ("user"     , "antenna")
        , ("password" , "antenna")
-       , ("dbname"   , "antenna") ]
+       , ("dbname"   , "antenna_tests") ]
 

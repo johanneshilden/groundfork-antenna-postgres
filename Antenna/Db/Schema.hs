@@ -238,7 +238,9 @@ deleteNode name = do
         return node
     let nodeKeyList = valList $ entityKey <$> nodes
     delete $ from $ \target ->
-        where_ $ target ^. TargetNodeId `in_` nodeKeyList
+        where_ $ target ^. TargetNodeId `in_` nodeKeyList ||. target ^. TargetKey `in_` nodeKeyList
+    delete $ from $ \device ->
+        where_ $ device ^. DeviceNodeId `in_` nodeKeyList 
     delete $ from $ \node ->
         where_ $ node ^. NodeId `in_` nodeKeyList
 

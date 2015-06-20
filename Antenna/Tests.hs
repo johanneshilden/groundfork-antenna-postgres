@@ -56,7 +56,16 @@ runTests = do
         hasd <- hasDevice "what" "not" salt 
         assert (not hasd) "Test 6" "Expected hasDevice 'what' 'not' == False, instead got True"
 
+        deleteNode "bob"
+        nodeCount <- getNodeCount
+        assert (nodeCount == 1) "Test 7" ("Expected getNodeCount == 1, instead got " ++ show nodeCount)
 
+        hasd <- hasDevice "bob" "bob" salt 
+        assert (not hasd) "Test 8" "Expected hasDevice 'bob' 'bob' == False, instead got True"
+
+        insertDevice "bob" "bob" salt
+
+        return ()
 
   where
     connectionStr = C8.pack $ unwords [ key ++ "=" ++ val | (key, val) <- testOpts ]
