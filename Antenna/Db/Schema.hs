@@ -5,15 +5,19 @@
 {-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE QuasiQuotes                #-}
+{-# LANGUAGE RecordWildCards            #-}
 {-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE TypeFamilies               #-}
 module Antenna.Db.Schema 
     ( NewNode(..)
+    , UpdateNode(..)
     , SqlT
     , ResultInsert(..)
+    , ResultUpdate(..)
     , addToTransactionRange 
     , countNodes
     , deleteAllTransactions
+    , updateNode
     , deleteNode 
     , getNodeByName
     , getNodeCount
@@ -23,23 +27,19 @@ module Antenna.Db.Schema
     , hasDevice
     , insertNode 
     , insertTransaction 
-    , lookupDevice
     , migrateAll
     , selectNodeByName
     , setNodeTargets 
     , unKey
     ) where
 
-import Control.Monad.IO.Class                        ( liftIO )
-
 import Control.Applicative                           ( (<$>), (<*>) )
-import Control.Lens                                  ( Cons, Setting, set, over, cons, at, (?~), (%~), (&) )
+import Control.Lens                                  ( Cons, Setting, over, cons, at, (?~), (%~), (&) )
 import Control.Monad                                 ( liftM, when, void )
 import Control.Monad.Logger
 import Control.Monad.Trans.Resource
-import Crypto.PasswordStore
 import Data.Map.Strict                               ( Map, empty, keys, elems )
-import Data.Maybe                                    ( listToMaybe, fromJust, isNothing )
+import Data.Maybe                                    ( listToMaybe, fromJust, fromMaybe, isNothing, isJust )
 import Data.Text                                     ( Text )
 import Data.Text.Encoding                            ( encodeUtf8, decodeUtf8 )
 import Data.Traversable                              ( sequence )
@@ -84,6 +84,10 @@ data ResultInsert a
   = InsertSuccess (Key a)
   | InsertConflict 
   | InsertBadRequest
+
+data ResultUpdate
+  = UpdateSuccess
+  | UpdateNotFound
 
 unKey :: (ToBackendKey SqlBackend a) => Key a -> Int
 unKey = fromIntegral . unSqlBackendKey . toBackendKey 
@@ -223,8 +227,8 @@ getNodeCount =
 data NewNode = NewNode
     { newName   :: Text
     , newFamily :: T.NodeType 
-    , newPass   :: Maybe (Text, Salt)
-    }
+    , newPass   :: Maybe Text
+    } deriving (Show)
 
 insertNode :: NewNode -> SqlT (ResultInsert Node)
 insertNode node 
@@ -235,14 +239,39 @@ insertNode node
     isDevice = T.Device == (node & newFamily)
     go [Value 0] = do
         key <- insert $ Node nodeName (T.toText $ node & newFamily)
-        insertSelect $ from $ \node -> 
+        insertSelect $ from $ \node -> do
+            where_ $ node ^. NodeId !=. val key
             return $ Target <# val key <&> (node ^. NodeId)
         when isDevice $ 
-            let (plaintext, salt) = fromJust (node & newPass)
-                secret = makePwd plaintext salt
+            let secret = fromJust (node & newPass)
              in void $ insert (Device key secret) 
         return (InsertSuccess key)
     go _ = return InsertConflict -- A node with the given name already exists
+
+data UpdateNode = UpdateNode
+    { updateName    :: Maybe Text
+    , updatePass    :: Maybe Text
+    , updateTargets :: Maybe [Text]
+    } deriving (Show)
+
+updateNode :: Text -> UpdateNode -> SqlT ResultUpdate
+updateNode name UpdateNode{..} = do
+    maybeNode <- selectNodeByName name
+    case maybeNode of
+      Nothing -> return UpdateNotFound
+      Just old -> do
+        let nodeType = nodeFamily (entityVal old)
+            nodeId   = val (entityKey old)
+        update $ \node -> do
+            set node [ NodeName =. val (fromMaybe name updateName) ]
+            where_ $ node ^. NodeId ==. nodeId 
+        void $ sequence (setNodeTargets <$> Just name <*> updateTargets)
+        when (nodeType == "device" && isJust updatePass) $ do
+            let secret = fromJust updatePass
+            update $ \device -> do
+                set device [ DeviceSecret =. val secret ]
+                where_ $ device ^. DeviceNodeId ==. nodeId
+        return UpdateSuccess
 
 deleteNode :: Text -> SqlT ()
 deleteNode name = do
@@ -300,17 +329,8 @@ deleteAllTransactions =
     transaction :: Delete Transaction
     transaction _ = return ()
 
-makePwd :: Text -> Salt -> Text
-makePwd pass salt = decodeUtf8 $ makePasswordSalt (encodeUtf8 pass) salt 17
-
-lookupDevice :: Text -> Text -> Salt -> SqlT (Maybe T.Node)
-lookupDevice name pass salt = hasDevice name pass salt >>= \exists -> 
-    if exists 
-        then getNodeByName name
-        else return Nothing
-
-hasDevice :: Text -> Text -> Salt -> SqlT Bool
-hasDevice name pass salt = query >>= \case 
+hasDevice :: Text -> Text -> SqlT Bool
+hasDevice name secret = query >>= \case 
     [Value 1] -> return True
     _________ -> return False
   where
@@ -320,5 +340,4 @@ hasDevice name pass salt = query >>= \case
             on (node ^. NodeId ==. device ^. DeviceNodeId)
             where_ $ node ^. NodeName ==. val name &&. device ^. DeviceSecret ==. val secret
             return countRows
-    secret = makePwd pass salt
 

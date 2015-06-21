@@ -12,4 +12,4 @@ import Antenna.Db
 import Antenna.Socket
 import Antenna.Types
 
-{-# ANN module "HLint: ignore Use import/export shortcut" #-}
+-- {-# ANN module "HLint: ignore Use import/export shortcut" #-}

@@ -4,14 +4,14 @@ module Antenna.Controller
     , okResponse
     ) where
 
-import Antenna.Db                                    ( runDb )
+import Antenna.Db                                    
 import Antenna.Db.Schema
 import Antenna.Types
 import Control.Applicative
 import Control.Lens
 import Control.Monad                                 ( join )
 import Control.Monad.Trans                           ( liftIO )
-import Crypto.PasswordStore
+import Crypto.PasswordStore                          ( Salt )
 import Data.Aeson
 import Data.Aeson.Lens
 import Data.HashMap.Strict                           ( HashMap, fromList )
@@ -27,6 +27,8 @@ import Web.Frank
 import Web.Simple
 
 import Prelude                                hiding ( sequence )
+
+import qualified Data.Vector                      as Vect
 
 respondWith :: ToJSON a => Status -> a -> AppController ()
 respondWith status object = respond (responseLBS status headers body)
@@ -73,6 +75,14 @@ authenticate action = do
 lookupNode :: (Text, Text) -> ConnectionPool -> Salt -> IO (Maybe Node)
 lookupNode (name, secret) pool = runDb pool . lookupDevice name secret 
 
+lookupDevice :: Text -> Text -> Salt -> SqlT (Maybe Node)
+lookupDevice name pass salt = hasDevice name secret >>= \exists -> 
+    if exists 
+        then getNodeByName name
+        else return Nothing
+  where
+    secret = makePwd pass salt
+
 credentials :: Request -> Maybe (Text, Text)
 credentials request = do
     headers <- lookup "Authorization" (requestHeaders request)
@@ -100,10 +110,12 @@ controller = do
               _______________ -> respondWith status400 (JsonError "BAD_REQUEST")
 
         put "nodes/:name" $ do
-            --name <- liftA (fromMaybe "") (queryParam "name")
+            name <- liftA (fromMaybe "") (queryParam "name")
             req  <- request
             body <- liftIO $ strictRequestBody req
-            undefined
+            case decode body of
+              Just (Object o) -> processUpdateNode name o
+              _______________ -> respondWith status400 (JsonError "BAD_REQUEST")
 
         delete "nodes/:name" $ do
             name <- liftA (fromMaybe "") (queryParam "name")
@@ -149,8 +161,23 @@ processNewNode object = do
         nodeType <- object ^? ix "type" ._String
         case nodeType of
           "device" -> do
-            pass <- object ^? ix "device" ._String
-            return $ NewNode nodeName Device $ Just (pass, salt)
+            pass <- object ^? ix "password" ._String
+            let secret = makePwd pass salt
+            return $ NewNode nodeName Device $ Just secret
           "virtual" -> 
             return $ NewNode nodeName Virtual Nothing
+
+processUpdateNode :: Text -> HashMap Text Value -> AppController ()
+processUpdateNode name object = do
+    app <- controllerState
+    let nodeTargets = over (_Just . traverse) (^.._String) targets <&> join . Vect.toList
+        node = UpdateNode nodeName nodePass nodeTargets
+    response <- liftIO . runDb (app ^. sqlPool) $ updateNode name node
+    case response of
+      UpdateNotFound -> respondWith status404 (JsonError "NOT_FOUND")
+      UpdateSuccess  -> respondWith status200 (JsonOk Nothing)
+  where
+    nodeName = object ^? ix "name"     ._String
+    nodePass = object ^? ix "password" ._String 
+    targets  = object ^? ix "targets"  ._Array 
 
