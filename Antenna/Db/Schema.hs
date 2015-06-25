@@ -37,6 +37,7 @@ module Antenna.Db.Schema
     , lookupCredentials
     , selectNodeById
     , getNodeByName
+    , getNodeSyncPoint
     , setNodeTargets 
     , setMinimumTimestamp
     , selectNodes
@@ -169,7 +170,9 @@ getNodes = do
                 , T._name      = val & nodeName
                 , T._family    = T.toType (val & nodeName)
                 , T._targets   = [] 
-                , T._syncPoint = val & nodeSyncPoint
+                , T._syncPoint = if val & nodeSaturated 
+                                    then T.Saturated 
+                                    else T.AtTime (T.Timestamp $ fromIntegral $ val & nodeSyncPoint)
                 , T._locked    = val & nodeLocked }
     insert (target,node) = 
         let name = nodeName (entityVal node)
@@ -219,7 +222,9 @@ translateNode node = do
         , T._name      = val & nodeName
         , T._family    = T.toType (val & nodeName)
         , T._targets   = nodeName . entityVal . snd <$> targets 
-        , T._syncPoint = val & nodeSyncPoint 
+        , T._syncPoint = if val & nodeSaturated 
+                            then T.Saturated 
+                            else T.AtTime (T.Timestamp $ fromIntegral $ val & nodeSyncPoint)
         , T._locked    = val & nodeLocked }
 
 selectTransactionsPage :: Int -> Int -> SqlT [Entity Transaction]
@@ -230,8 +235,9 @@ selectTransactionsPage offs lim =
          orderBy [asc (transaction ^. TransactionTimestamp)]
          return transaction
 
-selectReverseTransactions :: Key Node -> T.Timestamp -> SqlT [Entity Transaction]
-selectReverseTransactions node (T.Timestamp ts) = 
+selectReverseTransactions :: Key Node -> T.SyncPoint -> SqlT [Entity Transaction]
+selectReverseTransactions node T.Saturated = return []
+selectReverseTransactions node (T.AtTime (T.Timestamp ts)) = 
     select $ from $ \(transaction `InnerJoin` range) -> do
         on (range ^. RangeTransactionId ==. transaction ^. TransactionId)
         where_ (range ^. RangeNodeId ==. val node &&. transaction ^. TransactionTimestamp >=. val timestamp)
@@ -239,8 +245,9 @@ selectReverseTransactions node (T.Timestamp ts) =
   where
     timestamp = fromIntegral ts
 
-selectForwardTransactions :: [Key Node] -> T.Timestamp -> SqlT [Entity Transaction]
-selectForwardTransactions nodes (T.Timestamp ts) = 
+selectForwardTransactions :: [Key Node] -> T.SyncPoint -> SqlT [Entity Transaction]
+selectForwardTransactions nodes T.Saturated = return []
+selectForwardTransactions nodes (T.AtTime (T.Timestamp ts)) = 
     select $ from $ \(transaction `InnerJoin` range) -> do
         on (range ^. RangeTransactionId ==. transaction ^. TransactionId)
         groupBy (transaction ^. TransactionId)
@@ -268,12 +275,12 @@ populateTransactions transactions = do
     construct transaction = 
         let key  = entityKey transaction
             val  = entityVal transaction
-            up = T.Command 
-                    { _method   = fromMaybe T.POST $ decoded (val & transactionUpMethod)
+            up   = T.Command 
+                    { _method   = readMethod (val & transactionUpMethod)
                     , _resource = val & transactionUpResource
                     , _payload  = decoded (val & transactionUpPayload) }
             down = T.Command 
-                    { _method   = fromMaybe T.POST $ decoded (val & transactionDownMethod)
+                    { _method   = readMethod (val & transactionDownMethod)
                     , _resource = val & transactionDownResource
                     , _payload  = decoded (val & transactionDownPayload) } 
          in MapS.insert key T.Transaction 
@@ -291,14 +298,18 @@ populateTransactions transactions = do
          in MapS.update (Just . over T.range (cons name)) transId
     decoded :: FromJSON a => Text -> Maybe a
     decoded = decode . BL.fromStrict . encodeUtf8 
+    readMethod "PUT"    = T.PUT
+    readMethod "PATCH"  = T.PATCH
+    readMethod "DELETE" = T.DELETE
+    readMethod _        = T.POST
 
 getTransactionsPage :: Int -> Int -> SqlT [T.Transaction]
 getTransactionsPage offs lim = selectTransactionsPage offs lim >>= populateTransactions 
 
-getForwardActions :: [Key Node] -> T.Timestamp -> SqlT [T.Transaction]
+getForwardActions :: [Key Node] -> T.SyncPoint -> SqlT [T.Transaction]
 getForwardActions nodes ts = selectForwardTransactions nodes ts >>= populateTransactions 
 
-getReverseActions :: Key Node -> T.Timestamp -> SqlT [T.Transaction]
+getReverseActions :: Key Node -> T.SyncPoint -> SqlT [T.Transaction]
 getReverseActions node ts = selectReverseTransactions node ts >>= populateTransactions 
 
 countNodes :: Text -> SqlT [Value Int]
@@ -466,6 +477,21 @@ setMinimumTimestamp minTime = do
         set node [ NodeSyncPoint =. val minTime ]
         where_ $ node ^. NodeSyncPoint >. val minTime &&. node ^. NodeSaturated ==. val False
 
+getNodeSyncPoint :: Key Node -> SqlT T.SyncPoint
+getNodeSyncPoint nodeId = do
+    result <- select $ from $ 
+        \node -> do
+            where_ $ node ^. NodeId ==. val nodeId
+            limit 1
+            return node
+    case result of
+      [node] -> 
+        let val = entityVal node
+         in return $ if val & nodeSaturated 
+                then T.Saturated 
+                else T.AtTime (T.Timestamp $ fromIntegral $ val & nodeSyncPoint)
+      _ -> error "Application error."
+ 
 setNodeSyncPoint :: Key Node -> SqlT T.SyncPoint
 setNodeSyncPoint nodeId = do
     point <- select $ from $

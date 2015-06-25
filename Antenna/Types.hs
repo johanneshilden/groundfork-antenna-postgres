@@ -61,6 +61,12 @@ newtype Timestamp = Timestamp Int64
 data SyncPoint = AtTime Timestamp | Saturated
     deriving (Eq, Show, Typeable)
 
+instance Ord SyncPoint where
+    compare (AtTime a) (AtTime b) = compare a b
+    compare (AtTime _) Saturated  = LT
+    compare Saturated  (AtTime _) = GT
+    compare _ _                   = EQ
+
 toTime :: Scientific -> SyncPoint
 toTime = AtTime . Timestamp . fromIntegral . coefficient
 
@@ -103,7 +109,7 @@ data Node = Node
     , _name      :: Text
     , _family    :: NodeType
     , _targets   :: [Text]
-    , _syncPoint :: Int
+    , _syncPoint :: SyncPoint
     , _locked    :: Bool
     } deriving (Show)
 
@@ -199,7 +205,7 @@ okResponse = JsonOk . Just . Object
 
 data SyncRequest = SyncRequest
     { reqSyncTargets :: [Text]
-    , reqSyncPoint   :: Int
+    , reqSyncPoint   :: SyncPoint
     , reqSyncLog     :: [Transaction]
     } deriving (Show)
 

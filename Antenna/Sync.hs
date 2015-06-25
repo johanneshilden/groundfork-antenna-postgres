@@ -33,14 +33,19 @@ processSyncRequest node SyncRequest{..} = do
 
     response <- liftIO $ runDb (state ^. sqlPool) $ do
 
-        let targetNames   = reqSyncTargets `intersect` (node ^. targets)
-            nodeSyncPoint = node ^. syncPoint 
-            sourceKey     = Db.toKey (node ^. nodeId)
-            (ts, isAhead) = 
+        -- Update sync points for all nodes to the least recent (min) of the current
+        -- value and the timestamp of the first item in the commit log
+        unless (null reqSyncLog) $ Db.setMinimumTimestamp (takeMin reqSyncLog)
+
+        let targetNames = reqSyncTargets `intersect` (node ^. targets)
+            sourceKey   = node ^. nodeId & Db.toKey
+
+        nodeSyncPoint <- Db.getNodeSyncPoint sourceKey
+
+        let (tstamp, isAhead) = 
                 if reqSyncPoint < nodeSyncPoint
-                    then (reqSyncPoint, True)
-                    else (nodeSyncPoint, False)
-            tstamp = Timestamp (fromIntegral ts)
+                    then (reqSyncPoint  , True)
+                    else (nodeSyncPoint , False)
 
         reverseActions <- Db.getReverseActions sourceKey tstamp
 
@@ -49,18 +54,28 @@ processSyncRequest node SyncRequest{..} = do
         -- Insert commited transactions and annote transactions with the commit id 
         transactionIds <- insertMany $ translate sourceKey (succ commitId) <$> reqSyncLog
 
-        -- Update sync points for all nodes to the least recent (min) of the current
-        -- value and the timestamp of the first item in the commit log
-        unless (null reqSyncLog) $ Db.setMinimumTimestamp (takeMin reqSyncLog)
- 
         candidateTargets <- Db.selectNodeCollection targetNames
+
+--        -------------------------------------------------------------------
+--        liftIO $ print $ "Request sync targets : " ++ show reqSyncTargets
+--        liftIO $ print $ "Target names : " ++ show targetNames
+--        liftIO $ print $ "Candidate targets : " ++ show candidateTargets
+--        -------------------------------------------------------------------
 
         -- Collect transactions for which the range includes the source node or a candidate target 
         let targets = cons sourceKey (unValue <$> candidateTargets)
 
         Db.addToTransactionRange_ transactionIds sourceKey
 
+--        -------------------------------------------------------------------
+--        liftIO $ print $ "Targets : " ++ show targets
+--        -------------------------------------------------------------------
+
         forwardActions <- Db.getForwardActions targets tstamp
+
+--        -------------------------------------------------------------------
+--        liftIO $ print $ "forward actions : " ++ show forwardActions
+--        -------------------------------------------------------------------
 
         let keys = (Db.toKey . _transactionId <$> forwardActions) \\ transactionIds
         Db.addToTransactionRange_ keys sourceKey

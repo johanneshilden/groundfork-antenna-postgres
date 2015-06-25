@@ -233,11 +233,11 @@ main = do
             ]
 
     r <- runSync 
-        manager
-        ["test-2", "test-3", "test-4"]
-        0
-        [ customer_1 ]
-        "test" "hello"
+            manager
+            ["test-2", "test-3", "test-4"]
+            (Number 0)
+            [ customer_1 ]
+            "test" "hello"
 
     case decode (BL.fromStrict r) of
         Just (Object o) -> do
@@ -276,17 +276,17 @@ main = do
              ]
  
     r <- runSync 
-         manager
-         ["test", "test-3", "test-4"]
-         0
-         [ customer_1, customer_2 ]
-         "test-2" "hello"
+             manager
+             ["test", "test-3", "test-4"]
+             (Number 0)
+             [ customer_1, customer_2 ]
+             "test-2" "hello"
 
  
     let x = fromJust $ decode (BL.fromStrict r) :: MapS.HashMap Text Value
     let s = map (chr . fromEnum) $ BL.unpack $ encodePretty x
 
-     -- check response
+    -- check response
 
     let fwd = let Array a = (fromJust (MapS.lookup "forward" x)) in Vect.toList a
     let rev = let Array a = (fromJust (MapS.lookup "reverse" x)) in Vect.toList a
@@ -296,6 +296,141 @@ main = do
 
     testAssert (fwd' == [String "customers/id_2-1", String "customers/id_1-1", String "customers/id_2-2"]) "Test 8.1" $ "Unexpected result: " ++ show fwd'
     testAssert (rev' == []) "Test 8.2" $ "Unexpected result: " ++ show rev'
+
+    let sp = MapS.lookup "syncPoint" x
+
+    testAssert (Just "*" == sp) "Test 8.3" $ "Unexpected sync point : " ++ show sp
+
+    -------------------------------------------------------------
+    
+    -- set node sync targets for node 'test'
+
+    let body = Object $ MapS.fromList [ ("targets"  , Array $ Vect.fromList ["test-2", "test-3"]) ]
+
+    initReq <- parseUrl $ "http://localhost:3333/nodes/" ++ show node1Id 
+    let req = initReq 
+                { method = "PUT" 
+                , requestBody = RequestBodyLBS $ encode body 
+                , checkStatus = check
+                }
+    let req' = applyBasicAuth "test" "hello" req
+
+    withResponse req' manager $ \response -> do
+        let bodyReader = responseBody response
+        body <- bodyReader
+        let Object obj = fromJust $ decode (BL.fromStrict body)
+        testAssert (MapS.lookup "status" obj == Just (String "success")) "Test 9" 
+            "Expected response object having key status == 'success'."
+
+    -------------------------------------------------------------
+
+    r <- runSync 
+             manager
+             ["test-2", "test-3", "test-4"]
+             (Number 0)
+             [ ]
+             "test" "hello"
+
+    let x = fromJust $ decode (BL.fromStrict r) :: MapS.HashMap Text Value
+    let s = map (chr . fromEnum) $ BL.unpack $ encodePretty x
+
+    -- check response
+
+    let fwd = let Array a = (fromJust (MapS.lookup "forward" x)) in Vect.toList a
+    let rev = let Array a = (fromJust (MapS.lookup "reverse" x)) in Vect.toList a
+
+    let fwd' = catMaybes $ takeHrefs <$> fwd
+    let rev' = catMaybes $ takeHrefs <$> rev
+
+    testAssert (fwd' == [String "customers/id_2-1", String "customers/id_1-1", String "customers/id_2-2"]) 
+            "Test 10.1" $ "Unexpected result: " ++ show fwd'
+    testAssert (rev' == []) "Test 10.2" $ "Unexpected result: " ++ show rev'
+
+    let sp = MapS.lookup "syncPoint" x
+
+    testAssert (Just "*" == sp) "Test 10.3" $ "Unexpected sync point : " ++ show sp
+
+    -------------------------------------------------------------
+
+    r <- runSync 
+             manager
+             ["test-2", "test-3", "test-4"]
+             (Number 0)
+             [ ]
+             "test" "hello"
+
+    let x = fromJust $ decode (BL.fromStrict r) :: MapS.HashMap Text Value
+    let s = map (chr . fromEnum) $ BL.unpack $ encodePretty x
+
+    -- check response
+
+    let fwd = let Array a = (fromJust (MapS.lookup "forward" x)) in Vect.toList a
+    let rev = let Array a = (fromJust (MapS.lookup "reverse" x)) in Vect.toList a
+
+    let fwd' = catMaybes $ takeHrefs <$> fwd
+    let rev' = catMaybes $ takeHrefs <$> rev
+
+    print x
+
+--    testAssert (fwd' == [String "customers/id_2-1", String "customers/id_1-1", String "customers/id_2-2"]) 
+--            "Test 10.1" $ "Unexpected result: " ++ show fwd'
+--    testAssert (rev' == []) "Test 10.2" $ "Unexpected result: " ++ show rev'
+--
+--    let sp = MapS.lookup "syncPoint" x
+--
+--    testAssert (Just "*" == sp) "Test 10.3" $ "Unexpected sync point : " ++ show sp
+
+    -------------------------------------------------------------
+     
+
+    -- set node sync targets for node 'test-2'
+
+    let body = Object $ MapS.fromList [ ("targets"  , Array $ Vect.fromList ["test", "test-3"]) ]
+
+    initReq <- parseUrl $ "http://localhost:3333/nodes/" ++ show node2Id
+    let req = initReq 
+                { method = "PUT" 
+                , requestBody = RequestBodyLBS $ encode body 
+                , checkStatus = check
+                }
+    let req' = applyBasicAuth "test-2" "hello" req
+
+    withResponse req' manager $ \response -> do
+        let bodyReader = responseBody response
+        body <- bodyReader
+        let Object obj = fromJust $ decode (BL.fromStrict body)
+        testAssert (MapS.lookup "status" obj == Just (String "success")) "Test 11" 
+            "Expected response object having key status == 'success'."
+
+    -------------------------------------------------------------
+
+--    initReq <- parseUrl $ "http://localhost:3333/nodes/" 
+--    let req = initReq 
+--                { method = "GET" 
+--                , requestBody = RequestBodyLBS $ encode body 
+--                , checkStatus = check
+--                }
+--    let req' = applyBasicAuth "test-2" "hello" req
+--
+--    withResponse req' manager $ \response -> do
+--        return ()
+--        --let bodyReader = responseBody response
+--        --body <- bodyReader
+--        --print body
+--
+
+    -------------------------------------------------------------
+    -------------------------------------------------------------
+
+    initReq <- parseUrl $ "http://localhost:3333/log/reset" 
+    let req = initReq 
+                { method = "POST" 
+                , checkStatus = check
+                }
+    let req' = applyBasicAuth "test-2" "hello" req
+
+    withResponse req' manager $ \response -> do
+        return ()
 
 
     return ()
@@ -317,7 +452,7 @@ runSync manager targets syncPoint commit device pass = do
 
     let syncReq = Object $ MapS.fromList 
             [ ("targets"   , Array (Vect.fromList targets))
-            , ("syncPoint" , Number syncPoint)
+            , ("syncPoint" , syncPoint)
             , ("commit"    , Array (Vect.fromList commit)) ]
 
     initReq <- parseUrl "http://localhost:3333/sync"
