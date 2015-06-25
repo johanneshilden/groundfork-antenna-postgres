@@ -6,6 +6,8 @@ module Antenna.Tests
 import Antenna.Db
 import Antenna.Db.Schema
 import Antenna.Types
+import Control.Applicative
+import Control.Lens
 import Control.Monad.IO.Class                        ( liftIO )
 import Crypto.PasswordStore
 import Data.Maybe                                    ( fromJust, isJust )
@@ -43,16 +45,22 @@ runTests = do
         rawExecute "DELETE FROM target"      [ ]
         rawExecute "DELETE FROM node"        [ ]
 
-        insertNode $ NewNode "alice" Device $ Just (makePwd "xxx" salt)
-        insertNode $ NewNode "bob"   Device $ Just (makePwd "bob" salt)
+        alice <- insertNode $ NewNode "alice" Device (Just $ makePwd "xxx" salt) False
+        bob   <- insertNode $ NewNode "bob"   Device (Just $ makePwd "bob" salt) False
     
-        setNodeTargets "alice" ["bob"]
-        setNodeTargets "bob" ["alice"]
+        assert (isSuccessIns alice) "Test 1.1" "Expected isSuccess alice == True, instead got False"
+        assert (isSuccessIns bob)   "Test 1.2" "Expected isSuccess bob == True, instead got False"
+
+        let InsertSuccess aliceId = alice
+        let InsertSuccess bobId = bob
+
+        setNodeTargets aliceId ["bob"]
+        setNodeTargets bobId   ["alice"]
 
         nodeCount <- getNodeCount
-        assert (nodeCount == 2) "Test 1" ("Expected getNodeCount == 2, instead got " ++ show nodeCount)
+        assert (nodeCount == 2) "Test 1.3" ("Expected getNodeCount == 2, instead got " ++ show nodeCount)
 
-        maybeNode <- getNodeByName "alice"
+        maybeNode <- getNodeById aliceId
         assert (_name `fmap` maybeNode == Just "alice") "Test 2" ("Expected (Just 'alice'), instead got " ++ show (_name `fmap` maybeNode))
         assert (_targets `fmap` maybeNode == Just ["bob"]) "Test 3" ("Expected (Just '[\"bob\"]'), instead got " ++ show (_targets `fmap` maybeNode))
 
@@ -65,40 +73,49 @@ runTests = do
         hasd <- hasDevice "what" (makePwd "not" salt) 
         assert (not hasd) "Test 6" "Expected hasDevice 'what' 'not' == False, instead got True"
 
-        deleteNode "bob"
+        deleteNode bobId
         nodeCount <- getNodeCount
         assert (nodeCount == 1) "Test 7" ("Expected getNodeCount == 1, instead got " ++ show nodeCount)
 
         hasd <- hasDevice "bob" (makePwd "bob" salt) 
         assert (not hasd) "Test 8" "Expected hasDevice 'bob' 'bob' == False, instead got True"
 
-        insertNode $ NewNode "bob" Device $ Just (makePwd "bob" salt)
+        bob <- insertNode $ NewNode "bob" Device (Just $ makePwd "bob" salt) False
 
-        updateNode "bob" $ UpdateNode (Just "rob") Nothing Nothing
+        assert (isSuccessIns bob) "Test 9.1" "Expected isSuccess bob == True, instead got False"
+        let InsertSuccess bobId = bob
+
+        updateNode bobId $ UpdateNode (Just "rob") Nothing Nothing
 
         hasd <- hasDevice "bob" (makePwd "bob" salt) 
-        assert (not hasd) "Test 9" "Expected hasDevice 'bob' 'bob' == False, instead got True"
+        assert (not hasd) "Test 9.2" "Expected hasDevice 'bob' 'bob' == False, instead got True"
 
         hasd <- hasDevice "rob" (makePwd "bob" salt) 
         assert hasd "Test 10" "Expected hasDevice 'rob' 'bob' == True, instead got False"
 
-        insertNode $ NewNode "node3" Virtual Nothing
-        insertNode $ NewNode "node4" Virtual Nothing
-        insertNode $ NewNode "node5" Virtual Nothing
-        insertNode $ NewNode "node6" Virtual Nothing
+        insertNode $ NewNode "node3" Virtual Nothing False
+        insertNode $ NewNode "node4" Virtual Nothing False
+        insertNode $ NewNode "node5" Virtual Nothing False
+        insertNode $ NewNode "node6" Virtual Nothing False
  
         nodeCount <- getNodeCount
         assert (nodeCount == 6) "Test 11" ("Expected getNodeCount == 11, instead got " ++ show nodeCount)
 
-        updateNode "rob" $ UpdateNode Nothing Nothing (Just ["alice", "node5"])
+        rob <- getNodeByName "rob"
+
+        assert (isJust rob) "Test 12.1" "Expected True == isJust rob, instead got False"
+
+        let rob' = fromJust rob
+
+        updateNode (toKey $ rob' ^. nodeId) $ UpdateNode Nothing Nothing (Just ["alice", "node5"])
 
         maybeNode <- getNodeByName "rob"
-        assert (isJust maybeNode) "Test 12" "Expected True == isJust maybeNode, instead got False"
+        assert (isJust maybeNode) "Test 12.2" "Expected True == isJust maybeNode, instead got False"
 
         let node = fromJust maybeNode
         assert (allElems ["alice", "node5"] $ _targets node) "Test 13" "Target list does not match assigned targets."
 
-        updateNode "rob" $ UpdateNode Nothing Nothing (Just ["node5", "node4", "node3", "alice"])
+        updateNode (toKey $ rob' ^. nodeId) $ UpdateNode Nothing Nothing (Just ["node5", "node4", "node3", "alice"])
 
         maybeNode <- getNodeByName "rob"
         assert (isJust maybeNode) "Test 14" "Expected True == isJust maybeNode, instead got False"
@@ -106,13 +123,13 @@ runTests = do
         let node = fromJust maybeNode
         assert (allElems ["node5", "node4", "node3", "alice"] $ _targets node) "Test 15" "Target list does not match assigned targets."
 
-        updateNode "rob" $ UpdateNode Nothing Nothing Nothing
+        updateNode (toKey $ rob' ^. nodeId) $ UpdateNode Nothing Nothing Nothing
 
         maybeNode <- getNodeByName "rob"
         let node = fromJust maybeNode
         assert (allElems ["node5", "node4", "node3", "alice"] $ _targets node) "Test 16" "Target list does not match assigned targets."
 
-        updateNode "rob" $ UpdateNode Nothing (Just (makePwd "newpwd" salt)) Nothing
+        updateNode (toKey $ rob' ^. nodeId) $ UpdateNode Nothing (Just (makePwd "newpwd" salt)) Nothing
 
         hasd <- hasDevice "rob" (makePwd "bob" salt) 
         assert (not hasd) "Test 17" "Expected hasDevice 'rob' 'bob' == False, instead got True"
@@ -120,7 +137,7 @@ runTests = do
         hasd <- hasDevice "rob" (makePwd "newpwd" salt) 
         assert hasd "Test 18" "Expected hasDevice 'rob' 'newpwd' == True, instead got False"
 
-        updateNode "rob" $ UpdateNode Nothing (Just (makePwd "xxx" salt)) (Just [])
+        updateNode (toKey $ rob' ^. nodeId) $ UpdateNode Nothing (Just (makePwd "xxx" salt)) (Just [])
 
         hasd <- hasDevice "rob" (makePwd "xxx" salt) 
         assert hasd "Test 19" "Expected hasDevice 'rob' 'xxx' == True, instead got False"
@@ -129,6 +146,65 @@ runTests = do
         let node = fromJust maybeNode
         assert (allElems [] $ _targets node) "Test 20" "Target list does not match assigned targets."
 
+        -----------------------------------------------
+
+        a <- insertNode $ NewNode "test-1" Virtual Nothing True
+        b <- insertNode $ NewNode "test-2" Virtual Nothing True
+        c <- insertNode $ NewNode "test-3" Virtual Nothing True
+        d <- insertNode $ NewNode "test-4" Virtual Nothing True
+
+        let InsertSuccess nodeA = a
+        let InsertSuccess nodeB = b
+        let InsertSuccess nodeC = c 
+        let InsertSuccess nodeD = d 
+
+        t1 <- liftA fromJust $ insertTransaction nodeA 1 1  "" "" "" "" "" "" (Timestamp 10)
+        t2 <- liftA fromJust $ insertTransaction nodeA 1 2  "" "" "" "" "" "" (Timestamp 14)
+        t3 <- liftA fromJust $ insertTransaction nodeA 1 3  "" "" "" "" "" "" (Timestamp 34)
+        t4 <- liftA fromJust $ insertTransaction nodeA 1 4  "" "" "" "" "" "" (Timestamp 54)
+                                                                        
+        t5 <- liftA fromJust $ insertTransaction nodeB 2 1  "" "" "" "" "" "" (Timestamp 94)
+        t6 <- liftA fromJust $ insertTransaction nodeB 2 2  "" "" "" "" "" "" (Timestamp 194)
+                                                                        
+        t7 <- liftA fromJust $ insertTransaction nodeC 3 1  "" "" "" "" "" "" (Timestamp 294)
+        t8 <- liftA fromJust $ insertTransaction nodeC 3 2  "" "" "" "" "" "" (Timestamp 394)
+        t9 <- liftA fromJust $ insertTransaction nodeC 3 3  "" "" "" "" "" "" (Timestamp 400)
+        t10 <- liftA fromJust $ insertTransaction nodeC 3 4 "" "" "" "" "" "" (Timestamp 410)
+                                                                        
+        t11 <- liftA fromJust $ insertTransaction nodeA 4 1 "" "" "" "" "" "" (Timestamp 64)
+        t12 <- liftA fromJust $ insertTransaction nodeA 4 2 "" "" "" "" "" "" (Timestamp 105)
+        t13 <- liftA fromJust $ insertTransaction nodeA 4 3 "" "" "" "" "" "" (Timestamp 300)
+        t14 <- liftA fromJust $ insertTransaction nodeA 4 4 "" "" "" "" "" "" (Timestamp 405)
+                                                                        
+        t15 <- liftA fromJust $ insertTransaction nodeB 5 1 "" "" "" "" "" "" (Timestamp 210)
+        t16 <- liftA fromJust $ insertTransaction nodeB 5 2 "" "" "" "" "" "" (Timestamp 390)
+
+        addToTransactionRange t1 nodeB
+        addToTransactionRange t1 nodeC
+
+        addToTransactionRange t2 nodeB
+        addToTransactionRange t2 nodeC
+
+        addToTransactionRange t3 nodeB
+        addToTransactionRange t3 nodeC
+
+        addToTransactionRange t5 nodeA
+        addToTransactionRange t5 nodeC
+        addToTransactionRange t5 nodeD
+
+        addToTransactionRange t6 nodeA
+        addToTransactionRange t6 nodeC
+        addToTransactionRange t6 nodeD
+
+        -----------------------------------------------
+
+        rawExecute "DELETE FROM range"       [ ]
+        rawExecute "DELETE FROM transaction" [ ]
+        rawExecute "DELETE FROM device"      [ ]
+        rawExecute "DELETE FROM target"      [ ]
+        rawExecute "DELETE FROM node"        [ ]
+
+        insertNode $ NewNode "root" Device (Just $ makePwd "root" salt) False
 
         return ()
 

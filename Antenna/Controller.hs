@@ -5,10 +5,11 @@ module Antenna.Controller
     ) where
 
 import Antenna.Db                                    
-import Antenna.Db.Schema
+import Antenna.Db.Schema                      hiding ( Node )
+import Antenna.Sync
 import Antenna.Types
 import Control.Applicative
-import Control.Lens
+import Control.Lens                                  ( ix, traverse, over, _Just, (^?), (^.), (^..), (<&>) )
 import Control.Monad                                 ( join )
 import Control.Monad.Trans                           ( liftIO )
 import Crypto.PasswordStore                          ( Salt )
@@ -30,34 +31,6 @@ import Prelude                                hiding ( sequence )
 
 import qualified Data.Vector                      as Vect
 
-respondWith :: ToJSON a => Status -> a -> AppController ()
-respondWith status object = respond (responseLBS status headers body)
-  where
-    headers = [("Content-type", "application/json")]
-    body = encode object
-
-data OkResponse = JsonOk (Maybe Value)
-    deriving (Show)
-
-data ErrorResponse = JsonError Text
-    deriving (Show)
-
-instance ToJSON OkResponse where
-    toJSON (JsonOk body) = object $ 
-        [ ("status"  , "success")
-        , ("message" , "OK") 
-        ] ++ maybeToList (msgBody <$> body)
-      where
-        msgBody body = ("body", body)
-
-instance ToJSON ErrorResponse where
-    toJSON (JsonError code) = object
-        [ ("status" , "error")
-        , ("error"  , String code) ]
-
-okResponse :: Object -> OkResponse
-okResponse = JsonOk . Just . Object  
-
 authenticate :: (Node -> AppController ()) -> AppController ()
 authenticate action = do
     app <- controllerState
@@ -76,10 +49,7 @@ lookupNode :: (Text, Text) -> ConnectionPool -> Salt -> IO (Maybe Node)
 lookupNode (name, secret) pool = runDb pool . lookupDevice name secret 
 
 lookupDevice :: Text -> Text -> Salt -> SqlT (Maybe Node)
-lookupDevice name pass salt = hasDevice name secret >>= \exists -> 
-    if exists 
-        then getNodeByName name
-        else return Nothing
+lookupDevice name pass salt = lookupCredentials name secret
   where
     secret = makePwd pass salt
 
@@ -96,7 +66,7 @@ controller = do
 
     get "ping" $ respond (responseLBS status200 [] "Pong!")
 
-    authenticate $ \_ -> do
+    authenticate $ \node -> do
 
         get "nodes" $ do
             nodes <- runQuery getNodes
@@ -109,23 +79,26 @@ controller = do
               Just (Object o) -> processNewNode o
               _______________ -> respondWith status400 (JsonError "BAD_REQUEST")
 
-        put "nodes/:name" $ do
-            name <- liftA (fromMaybe "") (queryParam "name")
+        put "nodes/:id" $ do
+            node <- liftA (fromMaybe 0) (readQueryParam "id")
             req  <- request
             body <- liftIO $ strictRequestBody req
             case decode body of
-              Just (Object o) -> processUpdateNode name o
+              Just (Object o) -> processUpdateNode node o
               _______________ -> respondWith status400 (JsonError "BAD_REQUEST")
 
-        delete "nodes/:name" $ do
-            name <- liftA (fromMaybe "") (queryParam "name")
-            runQuery (deleteNode name)
+        delete "nodes/:id" $ do
+            node <- liftA (fromMaybe 0) (readQueryParam "id")
+            let nodeId = toKey node
+            runQuery (deleteNode nodeId)
             respondWith status200 (JsonOk Nothing)
 
         post "sync" $ do
             req  <- request
             body <- liftIO $ strictRequestBody req
-            undefined
+            case decode body of
+              Just o -> processSyncRequest node o
+              ______ -> respondWith status400 (JsonError "BAD_REQUEST")
 
         get "log" $ do
             page <- liftA (numeric  1) (queryParam "page")
@@ -157,22 +130,23 @@ processNewNode object = do
   where
     idResponse key = fromList [("id", Number $ fromIntegral $ unKey key)]
     buildNode salt = do
-        nodeName <- object ^? ix "name" ._String
-        nodeType <- object ^? ix "type" ._String
+        nodeName <- object ^? ix "name"   ._String
+        nodeType <- object ^? ix "type"   ._String
+        locked   <- object ^? ix "locked" ._Bool
         case nodeType of
           "device" -> do
             pass <- object ^? ix "password" ._String
             let secret = makePwd pass salt
-            return $ NewNode nodeName Device $ Just secret
+            return $ NewNode nodeName Device (Just secret) locked
           "virtual" -> 
-            return $ NewNode nodeName Virtual Nothing
+            return $ NewNode nodeName Virtual Nothing locked
 
-processUpdateNode :: Text -> HashMap Text Value -> AppController ()
-processUpdateNode name object = do
+processUpdateNode :: Int -> HashMap Text Value -> AppController ()
+processUpdateNode nodeId object = do
     app <- controllerState
     let nodeTargets = over (_Just . traverse) (^.._String) targets <&> join . Vect.toList
         node = UpdateNode nodeName nodePass nodeTargets
-    response <- liftIO . runDb (app ^. sqlPool) $ updateNode name node
+    response <- liftIO . runDb (app ^. sqlPool) $ updateNode (undefined nodeId) node
     case response of
       UpdateNotFound -> respondWith status404 (JsonError "NOT_FOUND")
       UpdateSuccess  -> respondWith status200 (JsonOk Nothing)
