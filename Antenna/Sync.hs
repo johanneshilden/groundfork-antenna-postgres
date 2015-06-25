@@ -9,7 +9,8 @@ import Control.Lens
 import Control.Monad                                 ( unless )
 import Control.Monad.Trans                           ( liftIO )
 import Data.Aeson
-import Data.List                                     ( intersect, (\\) )
+import Data.Function                                 ( on )
+import Data.List                                     ( intersect, (\\), sortBy )
 import Data.Monoid
 import Data.Text                                     ( Text, splitOn, isInfixOf )
 import Data.Text.Encoding                            ( encodeUtf8, decodeUtf8 )
@@ -28,7 +29,7 @@ processSyncRequest :: Node -> SyncRequest -> AppController ()
 processSyncRequest node SyncRequest{..} = do
     state <- controllerState 
 
-    liftIO $ print reqSyncLog
+    --liftIO $ print reqSyncLog
 
     response <- liftIO $ runDb (state ^. sqlPool) $ do
 
@@ -70,8 +71,8 @@ processSyncRequest node SyncRequest{..} = do
         return SyncResponse 
                 { respRewind    = 
                     if isAhead then []
-                               else _downAction <$> reverseActions 
-                , respForward   = _upAction <$> forwardActions
+                               else _downAction <$> sortBy (flip compare `on` _timestamp) reverseActions 
+                , respForward   = _upAction <$> sortBy (compare `on` _timestamp) forwardActions
                 , respSyncPoint = sp
                 }
 

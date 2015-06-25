@@ -235,7 +235,6 @@ selectReverseTransactions node (T.Timestamp ts) =
     select $ from $ \(transaction `InnerJoin` range) -> do
         on (range ^. RangeTransactionId ==. transaction ^. TransactionId)
         where_ (range ^. RangeNodeId ==. val node &&. transaction ^. TransactionTimestamp >=. val timestamp)
-        orderBy [desc (transaction ^. TransactionTimestamp)]
         return transaction
   where
     timestamp = fromIntegral ts
@@ -246,7 +245,6 @@ selectForwardTransactions nodes (T.Timestamp ts) =
         on (range ^. RangeTransactionId ==. transaction ^. TransactionId)
         groupBy (transaction ^. TransactionId)
         where_ (range ^. RangeNodeId `in_` valList nodes &&. transaction ^. TransactionTimestamp >=. val timestamp)
-        orderBy [asc (transaction ^. TransactionTimestamp)]
         return transaction
   where
     timestamp = fromIntegral ts

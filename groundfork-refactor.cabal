@@ -27,6 +27,6 @@ executable tests
   main-is:             Tests.hs
   -- other-modules:       
   -- other-extensions:    
-  build-depends:       base >=4.6 && <4.7, http-client, unordered-containers, aeson, vector, http-types, bytestring, text, scientific
+  build-depends:       base >=4.6 && <4.7, http-client, unordered-containers, aeson, vector, http-types, bytestring, text, scientific, aeson-pretty, stringsearch, MissingH
   -- hs-source-dirs:      
   default-language:    Haskell2010

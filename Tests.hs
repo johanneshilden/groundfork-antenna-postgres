@@ -4,13 +4,18 @@ module Main where
 import Control.Applicative
 import Control.Exception.Base
 import Data.Aeson
-import Data.Maybe                        ( fromJust )
+import Data.Aeson.Encode.Pretty
+import Data.Char
+import Data.String.Utils
+import Data.Maybe                        ( fromJust, catMaybes )
 import Data.Scientific
 import Data.Text                         ( Text )
 import Network.HTTP.Client
 import Network.HTTP.Types
 
 import qualified Data.ByteString         as BS
+import qualified Data.ByteString.Search  as Search
+import qualified Data.ByteString.Char8   as C8
 import qualified Data.ByteString.Lazy    as BL
 import qualified Data.HashMap.Strict     as MapS
 import qualified Data.Vector             as Vect
@@ -208,7 +213,7 @@ main = do
         let respStatus = responseStatus response
         body <- bodyReader
         let Object obj = fromJust $ decode (BL.fromStrict body)
-        testAssert (MapS.lookup "status" obj == Just (String "success")) "Test 5" "Expected response object having key status == 'success'."
+        testAssert (MapS.lookup "status" obj == Just (String "success")) "Test 6" "Expected response object having key status == 'success'."
 
 
     print "-------------------------------------------------------------"
@@ -235,48 +240,69 @@ main = do
         "test" "hello"
 
     case decode (BL.fromStrict r) of
-        Just (Object o) -> print o
-        _ -> undefined
+        Just (Object o) -> do
+            let f = MapS.lookup "forward" o
+            case f of
+              Just (Array v) -> do
+                let a = Vect.toList v
+                testAssert (length a == 1) "Test 7.1" "Expected response forward array length == 1"
+              _ -> error "Test 7. Unexpected response."
+        _ -> error "Test 7. Unexpected response."
 
 
     -------------------------------------------------------------
 
---     let customer_1 = Object $ MapS.fromList 
---             [ ("up", Object $ MapS.fromList 
---                     [ ("method", String "POST")
---                     , ("resource", String "customers")
---                     , ("payload", mkTestObject "customer-1" "||customers/1||") ]) 
---             , ("down", Object $ MapS.fromList 
---                     [ ("method", String "DELETE")
---                     , ("resource", String "||customers/1||") ]) 
---             , ("timestamp", Number 9050)
---             , ("index", Number 1)
---             ]
---     let customer_2 = Object $ MapS.fromList 
---             [ ("up", Object $ MapS.fromList 
---                     [ ("method", String "POST")
---                     , ("resource", String "customers")
---                     , ("payload", mkTestObject "customer-2" "||customers/2||") ]) 
---             , ("down", Object $ MapS.fromList 
---                     [ ("method", String "DELETE")
---                     , ("resource", String "||customers/2||") ]) 
---             , ("timestamp", Number 20050)
---             , ("index", Number 2)
---             ]
--- 
---     r <- runSync 
---         manager
---         ["test", "test-3", "test-4"]
---         0
---         [ customer_1, customer_2 ]
---         "test-2" "hello"
--- 
---     -- check response
--- 
--- --    print r
+    let customer_1 = Object $ MapS.fromList 
+             [ ("up", Object $ MapS.fromList 
+                     [ ("method", String "POST")
+                     , ("resource", String "customers")
+                     , ("payload", mkTestObject "customer-1" "||customers/1||") ]) 
+             , ("down", Object $ MapS.fromList 
+                     [ ("method", String "DELETE")
+                     , ("resource", String "||customers/1||") ]) 
+             , ("timestamp", Number 9050)
+             , ("index", Number 1)
+            ]
+    let customer_2 = Object $ MapS.fromList 
+             [ ("up", Object $ MapS.fromList 
+                     [ ("method", String "POST")
+                     , ("resource", String "customers")
+                     , ("payload", mkTestObject "customer-2" "||customers/2||") ]) 
+             , ("down", Object $ MapS.fromList 
+                     [ ("method", String "DELETE")
+                     , ("resource", String "||customers/2||") ]) 
+             , ("timestamp", Number 20050)
+             , ("index", Number 2)
+             ]
+ 
+    r <- runSync 
+         manager
+         ["test", "test-3", "test-4"]
+         0
+         [ customer_1, customer_2 ]
+         "test-2" "hello"
+
+ 
+    let x = fromJust $ decode (BL.fromStrict r) :: MapS.HashMap Text Value
+    let s = map (chr . fromEnum) $ BL.unpack $ encodePretty x
+
+     -- check response
+
+    let fwd = let Array a = (fromJust (MapS.lookup "forward" x)) in Vect.toList a
+    let rev = let Array a = (fromJust (MapS.lookup "reverse" x)) in Vect.toList a
+
+    let fwd' = catMaybes $ takeHrefs <$> fwd
+    let rev' = catMaybes $ takeHrefs <$> rev
+
+    testAssert (fwd' == [String "customers/id_2-1", String "customers/id_1-1", String "customers/id_2-2"]) "Test 8.1" $ "Unexpected result: " ++ show fwd'
+    testAssert (rev' == []) "Test 8.2" $ "Unexpected result: " ++ show rev'
+
 
     return ()
 
+
+-------------------------------------------------------------------------------
+-------------------------------------------------------------------------------
 -------------------------------------------------------------------------------
 
 mkTestObject name href = Object $ MapS.fromList
@@ -306,4 +332,10 @@ runSync manager targets syncPoint commit device pass = do
         let bodyReader = responseBody response
         body <- bodyReader
         return body
+
+takeHrefs (Object o) = do
+    (Object o') <- MapS.lookup "payload" o 
+    (Object o'') <- MapS.lookup "_links" o'
+    (Object o''') <- MapS.lookup "self" o''
+    MapS.lookup "href" o'''
 
