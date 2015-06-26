@@ -26,9 +26,10 @@ waiApp state = controllerApp state controller
 
 appSetup :: IO (AppState, Settings)
 appSetup = do
-    port <- read <$> getEnvDefault "PORT" "3333"
-    -- herokuParams <- dbConnParams
-    -- let opts = (Text.unpack *** Text.unpack) <$> herokuParams
+    --port <- read <$> getEnvDefault "PORT" "3333"
+    herokuParams <- dbConnParams
+    let opts = (Text.unpack *** Text.unpack) <$> herokuParams
+
     pool <- inIO $ createPostgresqlPool (connectionStr opts) 10
     runDb pool $ runMigration migrateAll
 
