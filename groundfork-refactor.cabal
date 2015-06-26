@@ -19,6 +19,11 @@ executable groundfork-refactor
   main-is:             Main.hs
   -- other-modules:       
   other-extensions:    OverloadedStrings, TemplateHaskell, FlexibleInstances, GADTs, QuasiQuotes, StandaloneDeriving, TypeFamilies, FlexibleContexts, GeneralizedNewtypeDeriving, MultiParamTypeClasses, NoMonomorphismRestriction, RecordWildCards, DeriveDataTypeable, LambdaCase
-  build-depends:       base, text, http-types, bytestring, unordered-containers, vector, stm, unix, transformers, mtl, containers, websockets, wai-extra, wai-cors, wai-websockets, warp, wai, persistent-postgresql, pwstore-fast, lens, amqp, simple, persistent, scientific, aeson, esqueleto, persistent-template, resourcet, monad-logger, text-show, lens-aeson
+  build-depends:       base, text, http-types, bytestring, unordered-containers, vector, stm, unix, transformers, mtl >=2.2.1, containers, websockets, wai-extra, wai-cors, wai-websockets, warp, wai, persistent-postgresql, pwstore-fast, lens, amqp, simple, persistent, scientific, aeson, esqueleto, persistent-template, resourcet, monad-logger, text-show, lens-aeson
   -- hs-source-dirs:      
+  default-language:    Haskell2010
+
+executable tests
+  main-is:             Tests.hs
+  build-depends:       base, unordered-containers, vector, bytestring, stringsearch, http-types, http-client, text, scientific, MissingH, aeson-pretty, aeson
   default-language:    Haskell2010
