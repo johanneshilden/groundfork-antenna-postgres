@@ -9,6 +9,7 @@ import Antenna.Db
 import Antenna.Db.Schema
 import Antenna.Types
 import Control.Applicative
+import Control.Arrow
 import Control.Lens
 import Control.Monad                                 ( liftM, void )
 import Crypto.PasswordStore
@@ -18,22 +19,25 @@ import Network.Wai.Handler.Warp
 import System.Posix.Env
 import System.Posix.Signals              
 import Web.Simple
+import Web.Heroku
 
 import qualified Data.ByteString.Char8            as C8
+import qualified Data.Text                        as Text
 
 waiApp :: AppState -> Application
 waiApp state = controllerApp state controller 
 
 appSetup :: IO (AppState, Settings)
 appSetup = do
-    --port <- read <$> getEnvDefault "PORT" "3333"
     herokuParams <- dbConnParams
     let opts = (Text.unpack *** Text.unpack) <$> herokuParams
+
+    port <- read <$> getEnvDefault "PORT" "3333"
 
     pool <- inIO $ createPostgresqlPool (connectionStr opts) 10
     runDb pool $ runMigration migrateAll
 
-    amqp <- openConnection "127.0.0.1" "/" "guest" "guest"
+    amqp <- openConnection "hiding-fiver-53.bigwig.lshift.net:10210" "Ao4ju39t8qD_" "eW_Kec9f" "ktG4y7BfZI54EnQ1MgGvwPftCTYqrtvD"
     chan <- openChannel amqp
 
     declareQueue chan newQueue { queueName = "default" }
