@@ -57,9 +57,9 @@ appSetup = do
 hup _ = print "HUP"
 term close = print "TERM" >> close
 
-opts :: [(String, String)]
-opts = [ ("host"     , "localhost")
-       , ("user"     , "antenna")
-       , ("password" , "antenna")
-       , ("dbname"   , "antenna_tests") ]
-
+--opts :: [(String, String)]
+--opts = [ ("host"     , "localhost")
+--       , ("user"     , "antenna")
+--       , ("password" , "antenna")
+--       , ("dbname"   , "antenna_tests") ]
+--
