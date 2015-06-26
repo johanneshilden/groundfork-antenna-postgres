@@ -6,7 +6,7 @@ import Antenna.Db
 import Antenna.Types
 import Control.Applicative
 import Control.Lens
-import Control.Monad                                 ( unless, forM_ )
+import Control.Monad                                 ( unless, when, forM_ )
 import Control.Monad.Trans                           ( liftIO )
 import Data.Aeson
 import Data.Function                                 ( on )
@@ -29,9 +29,6 @@ import qualified Text.Show.Text                   as Text
 processSyncRequest :: Node -> SyncRequest -> AppController ()
 processSyncRequest node SyncRequest{..} = do
     state <- controllerState 
-
-    --liftIO $ print reqSyncLog
-
     response <- liftIO $ runDb (state ^. sqlPool) $ do
 
         -- Update sync points for all nodes to the least recent (min) of the current
@@ -39,12 +36,12 @@ processSyncRequest node SyncRequest{..} = do
         unless (null reqSyncLog) $ do
             updated <- Db.updateTimestamp (takeMin reqSyncLog) 
             -- Broadcast websocket notifications
-            liftIO $ print updated
-            forM_ updated $ \node ->
+            forM_ updated $ \_node -> when (_node /= node ^. name) $ do
+                liftIO $ print _node
                 liftIO $ publishMsg (state ^. channel) "antenna" "" $ newMsg 
-                    { msgBody = BL.fromStrict (encodeUtf8 node)
-                    , msgDeliveryMode = Just Persistent 
-                    }
+                    { msgBody = BL.fromStrict (encodeUtf8 _node)
+                    , msgDeliveryMode = Just Persistent }
+            liftIO $ print "---"
 
         let targetNames = reqSyncTargets `intersect` (node ^. targets)
             sourceKey   = node ^. nodeId & Db.toKey
@@ -58,33 +55,19 @@ processSyncRequest node SyncRequest{..} = do
 
         reverseActions <- Db.getReverseActions sourceKey tstamp
 
-        commitId <- Db.getLastCommitId
+        commitId <- Db.getMaxCommitId
 
         -- Insert commited transactions and annote transactions with the commit id 
         transactionIds <- insertMany $ translate sourceKey (succ commitId) <$> reqSyncLog
 
         candidateTargets <- Db.selectNodeCollection targetNames
 
---        -------------------------------------------------------------------
---        liftIO $ print $ "Request sync targets : " ++ show reqSyncTargets
---        liftIO $ print $ "Target names : " ++ show targetNames
---        liftIO $ print $ "Candidate targets : " ++ show candidateTargets
---        -------------------------------------------------------------------
-
         -- Collect transactions for which the range includes the source node or a candidate target 
         let targets = cons sourceKey (unValue <$> candidateTargets)
 
         Db.addToTransactionRange_ transactionIds sourceKey
 
---        -------------------------------------------------------------------
---        liftIO $ print $ "Targets : " ++ show targets
---        -------------------------------------------------------------------
-
         forwardActions <- Db.getForwardActions targets tstamp
-
---        -------------------------------------------------------------------
---        liftIO $ print $ "forward actions : " ++ show forwardActions
---        -------------------------------------------------------------------
 
         let keys = (Db.toKey . _transactionId <$> forwardActions) \\ transactionIds
         Db.addToTransactionRange_ keys sourceKey
@@ -138,8 +121,7 @@ updObj commitId (Object o) = Object (MapS.mapWithKey deep o)
 updObj _ o = o
 
 replace_ :: Text.Show a => a -> Text -> Text
-replace_ commitId txt = splitOn "||" txt & zipWith (curry go) [1 .. ] 
-                                         & Text.concat 
+replace_ commitId txt = splitOn "||" txt & zipWith (curry go) [1 .. ] & Text.concat 
   where
     go (i, p) | odd i     = p
               | otherwise = 
@@ -147,4 +129,4 @@ replace_ commitId txt = splitOn "||" txt & zipWith (curry go) [1 .. ]
                    [_, i] | "-" `isInfixOf` i -> p
                    [r, i] -> r <> "/id_" <> Text.show commitId <> "-" <> i 
                    ______ -> p
-    
+

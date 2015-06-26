@@ -17,15 +17,6 @@ listen chan state connection = loop
         receiveDataMessage connection
         loop
 
---        message <- receiveDataMessage connection
---        case message of
---          Text text -> do
---                publishMsg chan "antenna" "" $ newMsg 
---                    { msgBody = text
---                    , msgDeliveryMode = Just Persistent }
---                loop 
---          _ -> loop
-
 wsApp :: AppState -> PendingConnection -> IO ()
 wsApp state pending = do
     connection <- acceptRequest pending

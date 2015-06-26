@@ -137,9 +137,9 @@ processNewNode object = do
           "device" -> do
             pass <- object ^? ix "password" ._String
             let secret = makePwd pass salt
-            return $ NewNode nodeName Device (Just secret) locked
+            return $ NewNode nodeName Device (Just secret) locked 
           "virtual" -> 
-            return $ NewNode nodeName Virtual Nothing locked
+            return $ NewNode nodeName Virtual Nothing locked 
 
 processUpdateNode :: Int -> HashMap Text Value -> AppController ()
 processUpdateNode nodeId object = do

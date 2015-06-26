@@ -22,7 +22,7 @@ module Antenna.Db.Schema
     , deleteAllTransactions
     , deleteNode 
     , getForwardActions
-    , getLastCommitId
+    , getMaxCommitId
     , getNodeById
     , getNodeById_
     , getNodeByName
@@ -468,7 +468,7 @@ hasDevice name secret = query >>= \case
             return countRows
 
 updateTimestamp :: Int -> SqlT [Text]
-updateTimestamp ts = do 
+updateTimestamp ts = do
     nodes <- selectNodes
     let updated = filter predicate nodes
     update $ \node -> do
@@ -477,7 +477,8 @@ updateTimestamp ts = do
         where_ $ node ^. NodeId `in_` valList (entityKey <$> updated)
     return (nodeName_ <$> updated)
   where
-    predicate node = (entityVal node & nodeSyncPoint) > ts
+    predicate node = nodeSaturated nodeVal || nodeSyncPoint nodeVal > ts
+      where nodeVal = entityVal node 
     nodeName_ = nodeName . entityVal
 
 getNodeSyncPoint :: Key Node -> SqlT T.SyncPoint
@@ -508,17 +509,21 @@ setNodeSyncPoint nodeId = do
     case point of
       [Value t] -> do
         update $ \node -> do
-            set node [ NodeSaturated =. val False, NodeSyncPoint =. val t ]
+            set node [ NodeSaturated =. val False
+                     , NodeSyncPoint =. val t 
+                     ]
             where_ $ node ^. NodeId ==. val nodeId
         return undefined
       _ -> do
         update $ \node -> do
-            set node [ NodeSaturated =. val True, NodeSyncPoint =. val 0 ]
+            set node [ NodeSaturated =. val True
+                     , NodeSyncPoint =. val 0 
+                     ]
             where_ $ node ^. NodeId ==. val nodeId
         return T.Saturated
 
-getLastCommitId :: SqlT Int
-getLastCommitId = do
+getMaxCommitId :: SqlT Int
+getMaxCommitId = do
     maxId <- select $ from $ \transaction -> do
         limit 1
         let maxId = max_ (transaction ^. TransactionCommitId)
