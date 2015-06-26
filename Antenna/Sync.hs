@@ -6,7 +6,7 @@ import Antenna.Db
 import Antenna.Types
 import Control.Applicative
 import Control.Lens
-import Control.Monad                                 ( unless )
+import Control.Monad                                 ( unless, forM_ )
 import Control.Monad.Trans                           ( liftIO )
 import Data.Aeson
 import Data.Function                                 ( on )
@@ -16,6 +16,7 @@ import Data.Text                                     ( Text, splitOn, isInfixOf 
 import Data.Text.Encoding                            ( encodeUtf8, decodeUtf8 )
 import Database.Esqueleto                            ( Key, unValue )
 import Database.Persist                              ( insertMany )
+import Network.AMQP                                  ( DeliveryMode(..), Message(..), newMsg, publishMsg )
 import Network.HTTP.Types
 import Web.Simple
 
@@ -35,7 +36,15 @@ processSyncRequest node SyncRequest{..} = do
 
         -- Update sync points for all nodes to the least recent (min) of the current
         -- value and the timestamp of the first item in the commit log
-        unless (null reqSyncLog) $ Db.setMinimumTimestamp (takeMin reqSyncLog)
+        unless (null reqSyncLog) $ do
+            updated <- Db.updateTimestamp (takeMin reqSyncLog) 
+            -- Broadcast websocket notifications
+            liftIO $ print updated
+            forM_ updated $ \node ->
+                liftIO $ publishMsg (state ^. channel) "antenna" "" $ newMsg 
+                    { msgBody = BL.fromStrict (encodeUtf8 node)
+                    , msgDeliveryMode = Just Persistent 
+                    }
 
         let targetNames = reqSyncTargets `intersect` (node ^. targets)
             sourceKey   = node ^. nodeId & Db.toKey

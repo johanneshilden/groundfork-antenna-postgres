@@ -13,6 +13,7 @@ import Control.Lens
 import Control.Monad                                 ( liftM, void )
 import Crypto.PasswordStore
 import Database.Persist.Postgresql
+import Network.AMQP
 import Network.Wai.Handler.Warp
 import System.Posix.Env
 import System.Posix.Signals              
@@ -30,7 +31,15 @@ appSetup = do
     -- let opts = (Text.unpack *** Text.unpack) <$> herokuParams
     pool <- inIO $ createPostgresqlPool (connectionStr opts) 10
     runDb pool $ runMigration migrateAll
-    let state = AppState pool (makeSalt "Mxg4YN0OaE3xaehmg3up")
+
+    amqp <- openConnection "127.0.0.1" "/" "guest" "guest"
+    chan <- openChannel amqp
+
+    declareQueue chan newQueue { queueName = "default" }
+    declareExchange chan newExchange { exchangeName = "antenna", exchangeType = "fanout" }
+    bindQueue chan "default" "antenna" ""
+
+    let state = AppState pool (makeSalt "Mxg4YN0OaE3xaehmg3up") chan
     let settings = defaultSettings & setPort port
                                    & setInstallShutdownHandler (void . signalHandlers)
     return (state, settings)

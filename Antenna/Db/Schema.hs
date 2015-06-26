@@ -10,42 +10,42 @@
 {-# LANGUAGE TypeFamilies               #-}
 module Antenna.Db.Schema 
     ( NewNode(..)
-    , UpdateNode(..)
-    , SqlT
+    , Node(..)
     , ResultInsert(..)
     , ResultUpdate(..)
-    , Node(..)
+    , SqlT
     , Transaction(..)
-    , isSuccessIns
+    , UpdateNode(..)
     , addToTransactionRange 
     , addToTransactionRange_
     , countNodes
     , deleteAllTransactions
-    , updateNode
     , deleteNode 
+    , getForwardActions
+    , getLastCommitId
     , getNodeById
     , getNodeById_
+    , getNodeByName
     , getNodeCount
+    , getNodeSyncPoint
     , getNodes 
     , getReverseActions
-    , getForwardActions
     , getTransactionsPage 
     , hasDevice
     , insertNode 
     , insertTransaction 
-    , migrateAll
+    , isSuccessIns
     , lookupCredentials
+    , migrateAll
     , selectNodeById
-    , getNodeByName
-    , getNodeSyncPoint
-    , setNodeTargets 
-    , setMinimumTimestamp
-    , selectNodes
     , selectNodeCollection
+    , selectNodes
     , setNodeSyncPoint
-    , getLastCommitId
-    , unKey
+    , setNodeTargets 
     , toKey
+    , unKey
+    , updateNode
+    , updateTimestamp
     ) where
 
 import Control.Applicative                           ( (<$>), (<*>) )
@@ -467,15 +467,18 @@ hasDevice name secret = query >>= \case
             where_ $ node ^. NodeName ==. val name &&. device ^. DeviceSecret ==. val secret
             return countRows
 
-setMinimumTimestamp :: Int -> SqlT ()
-setMinimumTimestamp minTime = do
+updateTimestamp :: Int -> SqlT [Text]
+updateTimestamp ts = do 
+    nodes <- selectNodes
+    let updated = filter predicate nodes
     update $ \node -> do
         set node [ NodeSaturated =. val False
-                 , NodeSyncPoint =. val minTime ]
-        where_ $ node ^. NodeSaturated ==. val True
-    update $ \node -> do
-        set node [ NodeSyncPoint =. val minTime ]
-        where_ $ node ^. NodeSyncPoint >. val minTime &&. node ^. NodeSaturated ==. val False
+                 , NodeSyncPoint =. val ts ]
+        where_ $ node ^. NodeId `in_` valList (entityKey <$> updated)
+    return (nodeName_ <$> updated)
+  where
+    predicate node = (entityVal node & nodeSyncPoint) > ts
+    nodeName_ = nodeName . entityVal
 
 getNodeSyncPoint :: Key Node -> SqlT T.SyncPoint
 getNodeSyncPoint nodeId = do

@@ -20,6 +20,8 @@ import Web.Simple
 
 import Network.HTTP.Types                     hiding ( Method, GET, PUT, POST, DELETE, PATCH )
 
+import qualified Network.AMQP                     as AMQP
+
 data NodeType 
   = Device 
     -- ^ An authenticated device node.
@@ -149,7 +151,9 @@ instance FromJSON Transaction where
 
 data AppState = AppState 
     { _sqlPool :: ConnectionPool 
-    , _salt    :: Salt } 
+    , _salt    :: Salt 
+    , _channel :: AMQP.Channel
+    } 
 
 $(makeLenses ''AppState)
 
