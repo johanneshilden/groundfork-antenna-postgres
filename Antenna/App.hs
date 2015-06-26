@@ -37,8 +37,8 @@ appSetup = do
     pool <- inIO $ createPostgresqlPool (connectionStr opts) 10
     runDb pool $ runMigration migrateAll
 
-    amqp <- openConnection "hiding-fiver-53.bigwig.lshift.net:10210" "Ao4ju39t8qD_" "eW_Kec9f" "ktG4y7BfZI54EnQ1MgGvwPftCTYqrtvD"
-    chan <- openChannel amqp
+    amqp <- openConnection' "hiding-fiver-53.bigwig.lshift.net" 10210 "Ao4ju39t8qD" "eW_Kec9f" "ktG4y7BfZI54EnQ1MgGvwPftCTYqrtvD"
+    chan <- openChannel amqp 
 
     declareQueue chan newQueue { queueName = "default" }
     declareExchange chan newExchange { exchangeName = "antenna", exchangeType = "fanout" }
@@ -58,8 +58,8 @@ hup _ = print "HUP"
 term close = print "TERM" >> close
 
 --opts :: [(String, String)]
---opts = [ ("host"     , "ec2-54-227-249-165.compute-1.amazonaws.com:5432")
---       , ("user"     , "eabsxoruzdpeto")
---       , ("password" , "NLpD6ORs0WMcPRpzadv4fZHft2")
---       , ("dbname"   , "d3l7rm39ii4dhq") ]
+--opts = [ ("host"     , "localhost")
+--       , ("user"     , "antenna")
+--       , ("password" , "antenna")
+--       , ("dbname"   , "antenna_tests") ]
 --
