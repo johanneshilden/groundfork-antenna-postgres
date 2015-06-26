@@ -29,8 +29,8 @@ waiApp state = controllerApp state controller
 
 appSetup :: IO (AppState, Settings)
 appSetup = do
---    herokuParams <- dbConnParams
---    let opts = (Text.unpack *** Text.unpack) <$> herokuParams
+    herokuParams <- dbConnParams
+    let opts = (Text.unpack *** Text.unpack) <$> herokuParams
 
     port <- read <$> getEnvDefault "PORT" "3333"
 
@@ -57,9 +57,9 @@ appSetup = do
 hup _ = print "HUP"
 term close = print "TERM" >> close
 
-opts :: [(String, String)]
-opts = [ ("host"     , "ec2-54-227-249-165.compute-1.amazonaws.com:5432")
-       , ("user"     , "eabsxoruzdpeto")
-       , ("password" , "NLpD6ORs0WMcPRpzadv4fZHft2")
-       , ("dbname"   , "d3l7rm39ii4dhq") ]
-
+--opts :: [(String, String)]
+--opts = [ ("host"     , "ec2-54-227-249-165.compute-1.amazonaws.com:5432")
+--       , ("user"     , "eabsxoruzdpeto")
+--       , ("password" , "NLpD6ORs0WMcPRpzadv4fZHft2")
+--       , ("dbname"   , "d3l7rm39ii4dhq") ]
+--
