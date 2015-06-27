@@ -110,7 +110,7 @@ data Node = Node
     { _nodeId    :: Int
     , _name      :: Text
     , _family    :: NodeType
-    , _targets   :: [Text]
+    , _targets   :: [Int]
     , _syncPoint :: SyncPoint
     , _locked    :: Bool
     } deriving (Show)

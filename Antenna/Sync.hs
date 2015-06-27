@@ -43,8 +43,7 @@ processSyncRequest node SyncRequest{..} = do
                     , msgDeliveryMode = Just Persistent }
             liftIO $ print "---"
 
-        let targetNames = reqSyncTargets `intersect` (node ^. targets)
-            sourceKey   = node ^. nodeId & Db.toKey
+        let sourceKey = node ^. nodeId & Db.toKey
 
         nodeSyncPoint <- Db.getNodeSyncPoint sourceKey
 
@@ -60,10 +59,11 @@ processSyncRequest node SyncRequest{..} = do
         -- Insert commited transactions and annote transactions with the commit id 
         transactionIds <- insertMany $ translate sourceKey (succ commitId) <$> reqSyncLog
 
-        candidateTargets <- Db.selectNodeCollection targetNames
+        candidates <- Db.selectNodeCollection reqSyncTargets
+        let candidateTargets = (unValue <$> candidates) `intersect` (Db.toKey <$> node ^. targets)
 
         -- Collect transactions for which the range includes the source node or a candidate target 
-        let targets = cons sourceKey (unValue <$> candidateTargets)
+        let targets = cons sourceKey candidateTargets
 
         Db.addToTransactionRange_ transactionIds sourceKey
 

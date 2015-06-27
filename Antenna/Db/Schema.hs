@@ -182,10 +182,10 @@ getNodes = do
                                     then T.Saturated 
                                     else T.AtTime (T.Timestamp $ fromIntegral $ val & nodeSyncPoint)
                 , T._locked    = val & nodeLocked })
-    insert (target,node) = 
-        let name = nodeName (entityVal node)
+    insert (target, node) = 
+        let nodeId = unKey (entityKey node)
             targetId = entityVal target & targetNodeId
-         in MapS.update (Just . over (_2 . T.targets) (cons name)) targetId
+         in MapS.update (Just . over (_2 . T.targets) (cons nodeId)) targetId
 
 lookupCredentials :: Text -> Text -> SqlT (Maybe T.Node)
 lookupCredentials name password = do
@@ -229,7 +229,7 @@ translateNode node = do
         { T._nodeId    = unKey key
         , T._name      = val & nodeName
         , T._family    = T.toType (val & nodeName)
-        , T._targets   = nodeName . entityVal . snd <$> targets 
+        , T._targets   = unKey . entityKey . snd <$> targets 
         , T._syncPoint = if val & nodeSaturated 
                             then T.Saturated 
                             else T.AtTime (T.Timestamp $ fromIntegral $ val & nodeSyncPoint)
