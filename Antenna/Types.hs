@@ -13,7 +13,7 @@ import Data.Aeson
 import Data.Int                                      ( Int64 )
 import Data.Maybe                                    ( maybeToList )
 import Data.Scientific
-import Data.Text                                     ( Text )
+import Data.Text                                     ( Text, pack )
 import Data.Typeable
 import Database.Persist.Sql
 import Web.Simple
@@ -206,6 +206,24 @@ instance ToJSON ErrorResponse where
 
 okResponse :: Object -> OkResponse
 okResponse = JsonOk . Just . Object  
+
+data Payload a = Payload String [a]
+
+instance (ToJSON a) => ToJSON (Payload a) where
+    toJSON (Payload key _data) = 
+        object [ pack key .= _data ]
+
+data Collection a = Collection
+    { collcnCount    :: Int
+    , collcnTotal    :: Int
+    , collcnResource :: Payload a }
+
+instance (ToJSON a) => ToJSON (Collection a) where
+    toJSON Collection{..} = object
+        [ "count"     .= collcnCount
+        , "total"     .= collcnTotal 
+        , "_embedded" .= collcnResource
+        ]
 
 data SyncRequest = SyncRequest
     { reqSyncTargets :: [Text]

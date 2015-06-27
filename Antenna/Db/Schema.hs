@@ -27,6 +27,7 @@ module Antenna.Db.Schema
     , getNodeById_
     , getNodeByName
     , getNodeCount
+    , getTransactionCount
     , getNodeSyncPoint
     , getNodes 
     , getReverseActions
@@ -318,14 +319,21 @@ countNodes name =
         where_ (node ^. NodeName ==. val name)
         return countRows
 
+type Count a = SqlExpr (Entity a) -> SqlQuery (SqlExpr (Value Int))
+
 getNodeCount :: SqlT Int
-getNodeCount = 
-    select (from nodes) >>= \case
+getNodeCount = do
+    let items = const (return countRows) :: Count Node
+    select (from items) >>= \case
       [Value n] -> return n
       _________ -> error "SQL error."
-  where
-    nodes :: Num a => SqlExpr (Entity Node) -> SqlQuery (SqlExpr (Value a))
-    nodes = const (return countRows)
+
+getTransactionCount :: SqlT Int
+getTransactionCount = do
+    let items = const (return countRows) :: Count Transaction
+    select (from items) >>= \case
+      [Value t] -> return t 
+      _________ -> error "SQL error."
 
 data NewNode = NewNode
     { newName   :: Text

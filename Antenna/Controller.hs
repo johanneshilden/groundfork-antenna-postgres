@@ -70,7 +70,9 @@ controller = do
 
         get "nodes" $ do
             nodes <- runQuery getNodes
-            respondWith status200 nodes
+            let len = length nodes
+                collection = Collection len len (Payload "nodes" nodes)
+            respondWith status200 collection
 
         post "nodes" $ do
             req  <- request
@@ -105,7 +107,9 @@ controller = do
             size <- liftA (numeric 25) (queryParam "size")
             let offs = (page - 1) * size
             transactions <- runQuery $ getTransactionsPage offs size
-            respondWith status200 transactions
+            total <- runQuery getTransactionCount 
+            let collection = Collection (length transactions) total (Payload "transactions" transactions)
+            respondWith status200 collection
 
         post "log/reset" $ do
             runQuery deleteAllTransactions
