@@ -233,7 +233,7 @@ selectTransactionsPage offs lim =
      select $ from $ \transaction -> do
          offset (fromIntegral offs)
          limit (fromIntegral lim)
-         orderBy [asc (transaction ^. TransactionTimestamp)]
+         orderBy [desc (transaction ^. TransactionCommitId), desc (transaction ^. TransactionBatchIndex)]
          return transaction
 
 selectReverseTransactions :: Key Node -> T.SyncPoint -> SqlT [Entity Transaction]
