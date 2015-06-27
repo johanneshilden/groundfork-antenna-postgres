@@ -78,8 +78,8 @@ processSyncRequest node SyncRequest{..} = do
         return SyncResponse 
                 { respRewind    = 
                     if isAhead then []
-                               else _downAction <$> sortBy (flip compare `on` _timestamp) reverseActions 
-                , respForward   = _upAction <$> sortBy (compare `on` _timestamp) forwardActions
+                               else _downAction <$> reverseActions 
+                , respForward   = _upAction <$> forwardActions 
                 , respSyncPoint = sp
                 }
 

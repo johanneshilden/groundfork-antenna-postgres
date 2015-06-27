@@ -18,7 +18,7 @@ corsPolicy = const $ Just $ simpleCorsResourcePolicy
 
 main :: IO ()
 main = do
-    -- runTests 
+    --runTests 
     (state, settings) <- appSetup
     ----------------------------------------------------
     createRootUser (_sqlPool state) (_salt state)

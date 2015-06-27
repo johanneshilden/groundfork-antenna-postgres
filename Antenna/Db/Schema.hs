@@ -50,12 +50,13 @@ module Antenna.Db.Schema
     ) where
 
 import Control.Applicative                           ( (<$>), (<*>) )
-import Control.Lens                                  ( Cons, Setting, over, cons, at, (?~), (%~), (&) )
+import Control.Lens                                  ( Cons, Setting, _2, over, cons, at, (?~), (%~), (&) )
 import Control.Monad                                 ( liftM, when, void )
 import Control.Monad.Logger
 import Control.Monad.Trans                           ( liftIO )
 import Control.Monad.Trans.Resource
 import Data.Aeson                                    ( FromJSON, decode, encode )
+import Data.List                                     ( sortBy )
 import Data.Map.Strict                               ( Map, empty, keys, elems )
 import Data.Maybe                                    ( listToMaybe, fromJust, fromMaybe, isNothing, isJust )
 import Data.Text                                     ( Text )
@@ -64,6 +65,7 @@ import Data.Traversable                              ( sequence )
 import Database.Persist                              ( selectList )
 import Database.Persist.TH
 
+import qualified Data.Function                    as Fun
 import qualified Antenna.Types                    as T 
 import qualified Data.ByteString.Lazy             as BL
 import qualified Data.Map.Strict                  as MapS
@@ -126,10 +128,14 @@ unKey = fromIntegral . unSqlBackendKey . toBackendKey
 toKey :: (Integral a, ToBackendKey SqlBackend b) => a -> Key b
 toKey = toSqlKey . fromIntegral 
 
-injectKeys :: Monad m => [a] -> (a -> Map k b -> Map k b) -> (c -> Map k b -> Map k b) -> [c] -> m [b]
-injectKeys items construct insert = 
-    let init = foldr construct empty items 
-     in return . elems . foldr insert init
+type Modifier k a b = a -> MapS.Map k (Int, b) -> MapS.Map k (Int, b)
+
+injectKeys :: [b] -> Modifier k (Int, b) d -> Modifier k e d -> [e] -> [d]
+injectKeys items construct insert x = snd <$> sorted
+  where
+    wkeys  = foldr insert init x
+    sorted = sortBy (compare `Fun.on` fst) (elems wkeys)
+    init   = foldr construct empty (zip [ 1 .. ] items)
 
 selectNodes :: SqlT [Entity Node]
 selectNodes = select $ from $ 
@@ -161,12 +167,12 @@ getNodes :: SqlT [T.Node]
 getNodes = do
     nodes <- selectNodes
     nodeTargets <- selectNodeTargetsIn (entityKey <$> nodes)
-    injectKeys nodes construct insert nodeTargets 
+    return $ injectKeys nodes construct insert nodeTargets 
   where
-    construct node = 
+    construct (index, node) = 
         let key = entityKey node
             val = entityVal node
-         in MapS.insert key T.Node 
+         in MapS.insert key (index, T.Node 
                 { T._nodeId    = unKey key
                 , T._name      = val & nodeName
                 , T._family    = T.toType (val & nodeName)
@@ -174,11 +180,11 @@ getNodes = do
                 , T._syncPoint = if val & nodeSaturated 
                                     then T.Saturated 
                                     else T.AtTime (T.Timestamp $ fromIntegral $ val & nodeSyncPoint)
-                , T._locked    = val & nodeLocked }
+                , T._locked    = val & nodeLocked })
     insert (target,node) = 
         let name = nodeName (entityVal node)
             targetId = entityVal target & targetNodeId
-         in MapS.update (Just . over T.targets (cons name)) targetId
+         in MapS.update (Just . over (_2 . T.targets) (cons name)) targetId
 
 lookupCredentials :: Text -> Text -> SqlT (Maybe T.Node)
 lookupCredentials name password = do
@@ -242,6 +248,7 @@ selectReverseTransactions node (T.AtTime (T.Timestamp ts)) =
     select $ from $ \(transaction `InnerJoin` range) -> do
         on (range ^. RangeTransactionId ==. transaction ^. TransactionId)
         where_ (range ^. RangeNodeId ==. val node &&. transaction ^. TransactionTimestamp >=. val timestamp)
+        orderBy [desc (transaction ^. TransactionTimestamp) ]
         return transaction
   where
     timestamp = fromIntegral ts
@@ -253,6 +260,7 @@ selectForwardTransactions nodes (T.AtTime (T.Timestamp ts)) =
         on (range ^. RangeTransactionId ==. transaction ^. TransactionId)
         groupBy (transaction ^. TransactionId)
         where_ (range ^. RangeNodeId `in_` valList nodes &&. transaction ^. TransactionTimestamp >=. val timestamp)
+        orderBy [asc (transaction ^. TransactionTimestamp) ]
         return transaction
   where
     timestamp = fromIntegral ts
@@ -268,35 +276,37 @@ selectRange transactions =
 populateTransactions :: [Entity Transaction] -> SqlT [T.Transaction]
 populateTransactions transactions = do
     range <- selectRange (entityKey <$> transactions)
-    injectKeys transactions construct insert range
+    return $ injectKeys transactions construct insert range
   where
-    construct :: Entity Transaction 
-              -> Map (Key Transaction) T.Transaction 
-              -> Map (Key Transaction) T.Transaction
-    construct transaction = 
+    construct :: (Int, Entity Transaction)
+              -> Map (Key Transaction) (Int, T.Transaction)
+              -> Map (Key Transaction) (Int, T.Transaction)
+    construct (index, transaction) = 
         let key  = entityKey transaction
             val  = entityVal transaction
             up   = T.Command 
                     { _method   = readMethod (val & transactionUpMethod)
                     , _resource = val & transactionUpResource
-                    , _payload  = decoded (val & transactionUpPayload) }
+                    , _payload  = decoded (val & transactionUpPayload) 
+                    }
             down = T.Command 
                     { _method   = readMethod (val & transactionDownMethod)
                     , _resource = val & transactionDownResource
-                    , _payload  = decoded (val & transactionDownPayload) } 
-         in MapS.insert key T.Transaction 
-            { T._transactionId = unKey key
-            , T._sourceNodeId  = val & transactionNodeId & unKey
-            , T._commitId      = val & transactionCommitId
-            , T._batchIndex    = val & transactionBatchIndex
-            , T._upAction      = up
-            , T._downAction    = down
-            , T._timestamp     = T.Timestamp (fromIntegral $ val & transactionTimestamp)
-            , T._range         = [] }
-    insert (range,node) = 
+                    , _payload  = decoded (val & transactionDownPayload) 
+                    } 
+         in MapS.insert key (index, T.Transaction 
+            { T._transactionId  = unKey key
+            , T._sourceNodeId   = val & transactionNodeId & unKey
+            , T._commitId       = val & transactionCommitId
+            , T._batchIndex     = val & transactionBatchIndex
+            , T._upAction       = up
+            , T._downAction     = down
+            , T._timestamp      = T.Timestamp (fromIntegral $ val & transactionTimestamp)
+            , T._range          = [] })
+    insert (range, node) = 
         let name = nodeName (entityVal node)
             transId = rangeTransactionId $ entityVal range
-         in MapS.update (Just . over T.range (cons name)) transId
+         in MapS.update (Just . over (_2 . T.range) (cons name)) transId
     decoded :: FromJSON a => Text -> Maybe a
     decoded = decode . BL.fromStrict . encodeUtf8 
     readMethod "PUT"    = T.PUT
