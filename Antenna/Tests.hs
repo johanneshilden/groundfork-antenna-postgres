@@ -54,8 +54,8 @@ runTests = do
         let InsertSuccess aliceId = alice
         let InsertSuccess bobId = bob
 
-        setNodeTargets aliceId ["bob"]
-        setNodeTargets bobId   ["alice"]
+        setNodeTargetsByNames aliceId ["bob"]
+        setNodeTargetsByNames bobId   ["alice"]
 
         nodeCount <- getNodeCount
         assert (nodeCount == 2) "Test 1.3" ("Expected getNodeCount == 2, instead got " ++ show nodeCount)
@@ -107,7 +107,8 @@ runTests = do
 
         let rob' = fromJust rob
 
-        updateNode (toKey $ rob' ^. nodeId) $ UpdateNode Nothing Nothing (Just ["alice", "node5"])
+        updateNode (toKey $ rob' ^. nodeId) $ UpdateNode Nothing Nothing Nothing
+        setNodeTargetsByNames (toKey $ rob' ^. nodeId) ["alice", "node5"]
 
         maybeNode <- getNodeByName "rob"
         assert (isJust maybeNode) "Test 12.2" "Expected True == isJust maybeNode, instead got False"
@@ -115,7 +116,8 @@ runTests = do
         let node = fromJust maybeNode
         assert (allElems ["alice", "node5"] $ _targets node) "Test 13" "Target list does not match assigned targets."
 
-        updateNode (toKey $ rob' ^. nodeId) $ UpdateNode Nothing Nothing (Just ["node5", "node4", "node3", "alice"])
+        updateNode (toKey $ rob' ^. nodeId) $ UpdateNode Nothing Nothing Nothing
+        setNodeTargetsByNames (toKey $ rob' ^. nodeId) ["node5", "node4", "node3", "alice"]
 
         maybeNode <- getNodeByName "rob"
         assert (isJust maybeNode) "Test 14" "Expected True == isJust maybeNode, instead got False"

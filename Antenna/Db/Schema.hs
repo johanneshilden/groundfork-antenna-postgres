@@ -43,6 +43,7 @@ module Antenna.Db.Schema
     , selectNodes
     , setNodeSyncPoint
     , setNodeTargets 
+    , setNodeTargetsByNames
     , toKey
     , unKey
     , updateNode
@@ -378,7 +379,7 @@ insertNode node
 data UpdateNode = UpdateNode
     { updateName    :: Maybe Text
     , updatePass    :: Maybe Text
-    , updateTargets :: Maybe [Text]
+    , updateTargets :: Maybe [Int]
     } deriving (Show)
 
 updateNode :: Key Node -> UpdateNode -> SqlT ResultUpdate
@@ -389,10 +390,11 @@ updateNode nodeId UpdateNode{..} = do
       Just old -> do
         let nodeVal = entityVal old
             oldName = nodeName nodeVal
+            targets = (fmap . fmap) toKey updateTargets
         update $ \node -> do
             set node [ NodeName =. val (fromMaybe oldName updateName) ]
             where_ $ node ^. NodeId ==. val nodeId 
-        void $ sequence (setNodeTargets <$> Just nodeId <*> updateTargets)
+        void $ sequence (setNodeTargets <$> Just nodeId <*> targets)
         when (nodeFamily nodeVal == "device" && isJust updatePass) $ do
             let secret = fromJust updatePass
             update $ \device -> do
@@ -413,8 +415,8 @@ deleteNode nodeId = do
     delete $ from $ \node ->
         where_ $ node ^. NodeId `in_` nodeKeyList
 
-setNodeTargets :: Key Node -> [Text] -> SqlT ()
-setNodeTargets nodeId targets = do
+setTargets :: PersistField t => Key Node -> EntityField Node t -> [t] -> SqlT ()
+setTargets nodeId field targets = do
     maybeNode <- selectNodeById nodeId
     case maybeNode of
       Nothing -> return ()
@@ -424,8 +426,14 @@ setNodeTargets nodeId targets = do
         delete $ from $ \target ->          -- Delete existing targets
             where_ $ target ^. TargetNodeId ==. val nodeKey
         insertSelect $ from $ \node -> do   -- Insert new targets
-            where_ $ node ^. NodeName `in_` targetList
+            where_ $ node ^. field `in_` targetList
             return $ Target <# val nodeKey <&> (node ^. NodeId)
+ 
+setNodeTargets :: Key Node -> [Key Node] -> SqlT ()
+setNodeTargets nodeId = setTargets nodeId NodeId 
+ 
+setNodeTargetsByNames :: Key Node -> [Text] -> SqlT ()
+setNodeTargetsByNames nodeId = setTargets nodeId NodeName 
  
 insertTransaction :: Key Node     -- ^ Node id
                   -> Int          -- ^ Commit id

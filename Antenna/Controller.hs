@@ -17,6 +17,7 @@ import Data.Aeson
 import Data.Aeson.Lens
 import Data.HashMap.Strict                           ( HashMap, fromList )
 import Data.Maybe                                    ( fromMaybe, maybeToList )
+import Data.Scientific
 import Data.Text                                     ( Text )
 import Data.Text.Encoding
 import Data.Traversable                              ( sequence )
@@ -148,13 +149,14 @@ processNewNode object = do
 processUpdateNode :: Int -> HashMap Text Value -> AppController ()
 processUpdateNode nodeId object = do
     app <- controllerState
-    let nodeTargets = over (_Just . traverse) (^.._String) targets <&> join . Vect.toList
-        node = UpdateNode nodeName nodePass nodeTargets
+    let nodeTargets = over (_Just . traverse) (^.._Number) targets <&> join . Vect.toList
+        node = UpdateNode nodeName nodePass (toInt nodeTargets)
     response <- liftIO . runDb (app ^. sqlPool) $ updateNode (toKey nodeId) node
     case response of
       UpdateNotFound -> respondWith status404 (JsonError "NOT_FOUND")
       UpdateSuccess  -> respondWith status200 (JsonOk Nothing)
   where
+    toInt = (fmap . fmap) (fromIntegral . coefficient)
     nodeName = object ^? ix "name"     ._String
     nodePass = object ^? ix "password" ._String 
     targets  = object ^? ix "targets"  ._Array 

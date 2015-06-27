@@ -41,6 +41,7 @@ appSetup = do
 
     AmqpSettings{..} <- amqpConnSettings
     amqp <- openConnection' amqpHostName (fromIntegral amqpPort) amqpVirtualHost amqpUser amqpPass
+    --amqp <- openConnection "127.0.0.1" "/" "guest" "guest"
     chan <- openChannel amqp 
 
     declareQueue chan newQueue { queueName = "default" }
