@@ -20,6 +20,7 @@ import System.Posix.Env
 import System.Posix.Signals              
 import Web.Simple
 import Web.Heroku
+import Web.Heroku.RabbitMQ
 
 import qualified Data.ByteString.Char8            as C8
 import qualified Data.Text                        as Text
@@ -37,7 +38,7 @@ appSetup = do
     pool <- inIO $ createPostgresqlPool (connectionStr opts) 10
     runDb pool $ runMigration migrateAll
 
-    amqp <- openConnection' "hiding-fiver-53.bigwig.lshift.net" 10210 "Ao4ju39t8qD_" "eW_Kec9f" "ktG4y7BfZI54EnQ1MgGvwPftCTYqrtvD"
+    amqp <- openAmqpConnection
     chan <- openChannel amqp 
 
     declareQueue chan newQueue { queueName = "default" }
