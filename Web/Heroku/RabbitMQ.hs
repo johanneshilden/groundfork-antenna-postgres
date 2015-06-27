@@ -3,6 +3,7 @@ module Web.Heroku.RabbitMQ
   ( module Network.AMQP
   , AmqpSettings(..)
   , amqpConnSettings
+  , parseAmqpUrl
   , openAmqpConnection
   ) where
 
@@ -21,7 +22,10 @@ data AmqpSettings = AmqpSettings
     } deriving (Show)
 
 amqpConnSettings :: IO AmqpSettings
-amqpConnSettings = liftM (parse . splitOneOf "@:/" . trimProtocol) (getEnv "RABBITMQ_BIGWIG_URL")
+amqpConnSettings = liftM parseAmqpUrl (getEnv "RABBITMQ_BIGWIG_URL")
+
+parseAmqpUrl :: String -> AmqpSettings
+parseAmqpUrl = parse . splitOneOf "@:/" . trimProtocol
   where
     parse :: [String] -> AmqpSettings
     parse [ user
