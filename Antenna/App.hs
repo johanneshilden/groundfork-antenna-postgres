@@ -37,7 +37,7 @@ appSetup = do
     pool <- inIO $ createPostgresqlPool (connectionStr opts) 10
     runDb pool $ runMigration migrateAll
 
-    amqp <- openConnection' "hiding-fiver-53.bigwig.lshift.net" 10210 "Ao4ju39t8qD" "eW_Kec9f" "ktG4y7BfZI54EnQ1MgGvwPftCTYqrtvD"
+    amqp <- openConnection' "hiding-fiver-53.bigwig.lshift.net" 10210 "Ao4ju39t8qD_" "eW_Kec9f" "ktG4y7BfZI54EnQ1MgGvwPftCTYqrtvD"
     chan <- openChannel amqp 
 
     declareQueue chan newQueue { queueName = "default" }
