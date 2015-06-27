@@ -34,7 +34,7 @@ data NodeType
 
 toText :: NodeType -> Text
 toText Virtual = "virtual"
-toText _______ = "device"
+toText Device  = "device"
 
 toType :: Text -> NodeType
 toType "virtual" = Virtual

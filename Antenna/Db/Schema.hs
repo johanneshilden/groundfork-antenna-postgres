@@ -176,7 +176,7 @@ getNodes = do
          in MapS.insert key (index, T.Node 
                 { T._nodeId    = unKey key
                 , T._name      = val & nodeName
-                , T._family    = T.toType (val & nodeName)
+                , T._family    = T.toType (val & nodeFamily)
                 , T._targets   = [] 
                 , T._syncPoint = if val & nodeSaturated 
                                     then T.Saturated 
