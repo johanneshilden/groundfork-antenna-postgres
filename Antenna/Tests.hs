@@ -1,7 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Antenna.Tests 
     ( runTests
-    , createRootUser
     ) where
 
 import Antenna.Db
@@ -30,14 +29,6 @@ allElems xs ys
   where
     go y p | not p       = False
            | otherwise = y `elem` ys
-
-createRootUser :: IO ()
-createRootUser = do
-    pool <- inIO $ createPostgresqlPool connectionStr 10
-    let salt = makeSalt "Mxg4YN0OaE3xaehmg3up"
-    runDb pool $ insertNode $ NewNode "root" Device (Just $ makePwd "root" salt) False
-    return ()
-
 
 runTests :: IO ()
 runTests = do

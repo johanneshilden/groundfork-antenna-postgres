@@ -2,6 +2,8 @@
 module Main where
 
 import Antenna.Core
+import Antenna.Db
+import Antenna.Db.Schema
 import Antenna.Tests
 import Network.Wai
 import Network.Wai.Handler.Warp
@@ -16,10 +18,16 @@ corsPolicy = const $ Just $ simpleCorsResourcePolicy
 
 main :: IO ()
 main = do
-    createRootUser
     -- runTests 
     (state, settings) <- appSetup
+    ----------------------------------------------------
+    createRootUser (_sqlPool state) (_salt state)
+    ----------------------------------------------------
     runSettings settings 
         $ cors corsPolicy 
         $ websocketsOr defaultConnectionOptions (wsApp state) (waiApp state)
+
+createRootUser pool salt = do
+    runDb pool $ insertNode $ NewNode "root" Device (Just $ makePwd "root" salt) False
+    return ()
 
