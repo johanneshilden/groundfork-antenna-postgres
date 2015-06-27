@@ -166,6 +166,7 @@ instance ToJSON Node where
         , "type"      .= (node & _family & toText) 
         , "targets"   .= (node & _targets) 
         , "syncPoint" .= (node & _syncPoint) 
+        , "locked"    .= (node & _locked) 
         ]
 
 instance ToJSON Transaction where
