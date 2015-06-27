@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards   #-}
 module Antenna.App 
     ( appSetup
     , waiApp
@@ -38,8 +39,8 @@ appSetup = do
     pool <- inIO $ createPostgresqlPool (connectionStr opts) 10
     runDb pool $ runMigration migrateAll
 
-    amqp <- openAmqpConnection
-    --amqp <- openConnection "127.0.0.1" "/" "guest" "guest"
+    AmqpSettings{..} <- amqpConnSettings
+    amqp <- openConnection' amqpHostName (fromIntegral amqpPort) amqpVirtualHost amqpUser amqpPass
     chan <- openChannel amqp 
 
     declareQueue chan newQueue { queueName = "default" }

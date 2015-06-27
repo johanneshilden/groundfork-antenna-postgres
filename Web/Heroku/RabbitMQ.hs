@@ -1,31 +1,26 @@
-{-# LANGUAGE RecordWildCards #-}
 module Web.Heroku.RabbitMQ 
-  ( module Network.AMQP
-  , AmqpSettings(..)
+  ( AmqpSettings(..)
   , amqpConnSettings
   , parseAmqpUrl
-  , openAmqpConnection
   ) where
 
 import Control.Monad
-import Data.List.Split
-import Data.Text
-import Network.AMQP
+import Data.Text ( Text, pack )
 import System.Environment
 
 data AmqpSettings = AmqpSettings
     { amqpHostName    :: String
-    , amqpVirtualHost :: String
-    , amqpUser        :: String
-    , amqpPass        :: String
+    , amqpVirtualHost :: Text
+    , amqpUser        :: Text
+    , amqpPass        :: Text
     , amqpPort        :: Int 
-    } deriving (Show)
+    } deriving (Show, Eq)
 
 amqpConnSettings :: IO AmqpSettings
 amqpConnSettings = liftM parseAmqpUrl (getEnv "RABBITMQ_BIGWIG_URL")
 
 parseAmqpUrl :: String -> AmqpSettings
-parseAmqpUrl = parse . splitOneOf "@:/" . trimProtocol
+parseAmqpUrl = parse . pieces "" [] . trimProtocol
   where
     parse :: [String] -> AmqpSettings
     parse [ user
@@ -33,20 +28,15 @@ parseAmqpUrl = parse . splitOneOf "@:/" . trimProtocol
           , host
           , port
           , vhst 
-          ] = AmqpSettings host vhst user pass (read port)
+          ] = AmqpSettings host (pack vhst) (pack user) (pack pass) (read port)
     parse _ = error "Unexpected environment variable format."
 
     trimProtocol :: String -> String
     trimProtocol ('a':'m':'q':'p':':':'/':'/':rest) = rest
     trimProtocol str = str
 
-openAmqpConnection :: IO Connection
-openAmqpConnection = 
-     amqpConnSettings >>= \AmqpSettings{..} -> 
-        openConnection' 
-            amqpHostName 
-            (fromIntegral amqpPort)
-            (pack amqpVirtualHost)
-            (pack amqpUser) 
-            (pack amqpPass)
+    pieces acc ys [] = reverse (reverse acc:ys)
+    pieces acc ys (x:xs) 
+        | x `elem` "@:/" = pieces "" (reverse acc:ys) xs 
+        | otherwise = pieces (x:acc) ys xs 
 
