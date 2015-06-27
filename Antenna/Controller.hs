@@ -134,14 +134,14 @@ processNewNode object = do
   where
     idResponse key = fromList [("id", Number $ fromIntegral $ unKey key)]
     buildNode salt = do
-        nodeName <- object ^? ix "name"   ._String
-        nodeType <- object ^? ix "type"   ._String
-        locked   <- object ^? ix "locked" ._Bool
+        nodeName <- object ^? ix "name"._String
+        nodeType <- object ^? ix "type"._String
+        let locked = fromMaybe False (object ^? ix "locked"._Bool)
         case nodeType of
           "device" -> do
-            pass <- object ^? ix "password" ._String
+            pass <- object ^? ix "password"._String
             let secret = makePwd pass salt
-            return $ NewNode nodeName Device (Just secret) locked 
+            return $ NewNode nodeName Device (Just secret) locked
           "virtual" -> 
             return $ NewNode nodeName Virtual Nothing locked 
 

@@ -28,6 +28,6 @@ main = do
         $ websocketsOr defaultConnectionOptions (wsApp state) (waiApp state)
 
 createRootUser pool salt = do
-    runDb pool $ insertNode $ NewNode "root" Device (Just $ makePwd "root" salt) False
+    runDb pool $ insertNode $ NewNode "root" Device (Just $ makePwd "root" salt) True
     return ()
 
