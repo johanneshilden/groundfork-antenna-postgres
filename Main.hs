@@ -16,6 +16,7 @@ corsPolicy = const $ Just $ simpleCorsResourcePolicy
 
 main :: IO ()
 main = do
+    createRootUser
     -- runTests 
     (state, settings) <- appSetup
     runSettings settings 
