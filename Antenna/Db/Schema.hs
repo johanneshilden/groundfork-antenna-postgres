@@ -144,11 +144,11 @@ selectNodes = select $ from $
         orderBy [asc (node ^. NodeId)]
         return node
  
-selectNodeCollection :: [Text] -> SqlT [Value (Key Node)]
-selectNodeCollection names = select $ from $ 
+selectNodeCollection :: [Text] -> [Key Node] -> SqlT [Entity Node]
+selectNodeCollection names nodes = select $ from $ 
     \node -> do
-        where_ $ node ^. NodeName `in_` valList names
-        return (node ^. NodeId)
+        where_ $ node ^. NodeName `in_` valList names &&. node ^. NodeId `in_` valList nodes
+        return node 
 
 selectNodeTargets :: Key Node -> SqlT [(Entity Target, Entity Node)]
 selectNodeTargets nodeId = select $ from $

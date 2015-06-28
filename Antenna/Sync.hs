@@ -14,7 +14,7 @@ import Data.List                                     ( intersect, (\\), sortBy )
 import Data.Monoid
 import Data.Text                                     ( Text, splitOn, isInfixOf )
 import Data.Text.Encoding                            ( encodeUtf8, decodeUtf8 )
-import Database.Esqueleto                            ( Key, unValue )
+import Database.Esqueleto                            ( Key, unValue, entityKey, entityVal )
 import Database.Persist                              ( insertMany )
 import Network.AMQP                                  ( DeliveryMode(..), Message(..), newMsg, publishMsg )
 import Network.HTTP.Types
@@ -59,8 +59,8 @@ processSyncRequest node SyncRequest{..} = do
         -- Insert commited transactions and annote transactions with the commit id 
         transactionIds <- insertMany $ translate sourceKey (succ commitId) <$> reqSyncLog
 
-        candidates <- Db.selectNodeCollection reqSyncTargets
-        let candidateTargets = (unValue <$> candidates) `intersect` (Db.toKey <$> node ^. targets)
+        candidates <- Db.selectNodeCollection reqSyncTargets (Db.toKey <$> node ^. targets)
+        let candidateTargets = entityKey <$> candidates
 
         -- Collect transactions for which the range includes the source node or a candidate target 
         let targets = cons sourceKey candidateTargets
@@ -72,6 +72,12 @@ processSyncRequest node SyncRequest{..} = do
         let keys = (Db.toKey . _transactionId <$> forwardActions) \\ transactionIds
         Db.addToTransactionRange_ keys sourceKey
 
+        -- Virtual nodes
+        let virtualNodes = filter (\t -> "virtual" == Db.nodeFamily (entityVal t)) candidates
+
+        forM_ virtualNodes $ \_node -> 
+            Db.addToTransactionRange_ transactionIds (entityKey _node)
+ 
         -- Update sync point for source node
         sp <- Db.setNodeSyncPoint sourceKey
     
