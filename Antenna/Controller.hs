@@ -151,8 +151,6 @@ processUpdateNode nodeId object = do
     app <- controllerState
     let nodeTargets = over (_Just . traverse) (^.._Number) targets <&> join . Vect.toList
         node = UpdateNode nodeName nodePass (toInt nodeTargets)
-    liftIO $ print nodeTargets
-    liftIO $ print (toInt nodeTargets)
     response <- liftIO . runDb (app ^. sqlPool) $ updateNode (toKey nodeId) node
     case response of
       UpdateNotFound -> respondWith status404 (JsonError "NOT_FOUND")
