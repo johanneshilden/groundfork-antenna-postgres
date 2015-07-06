@@ -35,6 +35,7 @@ processSyncRequest node SyncRequest{..} = do
         -- value and the timestamp of the first item in the commit log
         unless (null reqSyncLog) $ do
             updated <- Db.updateTimestamp (takeMin reqSyncLog) 
+            liftIO $ print updated
             -- Broadcast websocket notifications
             forM_ updated $ \_node -> when (_node /= node ^. name) $ do
                 liftIO $ publishMsg (state ^. channel) "antenna" "" $ newMsg 

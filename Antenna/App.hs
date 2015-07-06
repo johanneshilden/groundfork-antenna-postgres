@@ -31,17 +31,17 @@ waiApp state = controllerApp state controller
 
 appSetup :: IO (AppState, Settings)
 appSetup = do
-    herokuParams <- dbConnParams
-    let opts = (Text.unpack *** Text.unpack) <$> herokuParams
+--    herokuParams <- dbConnParams
+--    let opts = (Text.unpack *** Text.unpack) <$> herokuParams
 
     port <- read <$> getEnvDefault "PORT" "3333"
 
     pool <- inIO $ createPostgresqlPool (connectionStr opts) 10
     runDb pool $ runMigration migrateAll
 
-    AmqpSettings{..} <- amqpConnSettings
-    amqp <- openConnection' amqpHostName (fromIntegral amqpPort) amqpVirtualHost amqpUser amqpPass
---    amqp <- openConnection "127.0.0.1" "/" "guest" "guest"
+--    AmqpSettings{..} <- amqpConnSettings
+--    amqp <- openConnection' amqpHostName (fromIntegral amqpPort) amqpVirtualHost amqpUser amqpPass
+    amqp <- openConnection "127.0.0.1" "/" "guest" "guest"
     chan <- openChannel amqp 
 
     declareQueue chan newQueue { queueName = "default" }
@@ -61,9 +61,9 @@ appSetup = do
 hup _ = print "HUP"
 term close = print "TERM" >> close
 
---opts :: [(String, String)]
---opts = [ ("host"     , "localhost")
---       , ("user"     , "antenna")
---       , ("password" , "antenna")
---       , ("dbname"   , "antenna_tests") ]
---
+opts :: [(String, String)]
+opts = [ ("host"     , "localhost")
+       , ("user"     , "antenna")
+       , ("password" , "antenna")
+       , ("dbname"   , "antenna_tests") ]
+
