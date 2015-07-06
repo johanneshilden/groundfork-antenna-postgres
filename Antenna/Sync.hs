@@ -37,11 +37,9 @@ processSyncRequest node SyncRequest{..} = do
             updated <- Db.updateTimestamp (takeMin reqSyncLog) 
             -- Broadcast websocket notifications
             forM_ updated $ \_node -> when (_node /= node ^. name) $ do
-                liftIO $ print _node
                 liftIO $ publishMsg (state ^. channel) "antenna" "" $ newMsg 
                     { msgBody = BL.fromStrict (encodeUtf8 _node)
                     , msgDeliveryMode = Just Persistent }
-            liftIO $ print "---"
 
         let sourceKey = node ^. nodeId & Db.toKey
 
