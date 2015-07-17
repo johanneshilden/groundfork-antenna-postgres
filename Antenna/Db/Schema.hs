@@ -16,8 +16,7 @@ module Antenna.Db.Schema
     , SqlT
     , Transaction(..)
     , UpdateNode(..)
-    , addToTransactionRange 
-    , addToTransactionRange_
+    , addToTransactionRange
     , countNodes
     , deleteAllTransactions
     , deleteNode 
@@ -57,7 +56,7 @@ import Control.Monad.Logger
 import Control.Monad.Trans                           ( liftIO )
 import Control.Monad.Trans.Resource
 import Data.Aeson                                    ( FromJSON, decode, encode )
-import Data.List                                     ( sortBy )
+import Data.List                                     ( (\\), sortBy )
 import Data.Map.Strict                               ( Map, empty, keys, elems )
 import Data.Maybe                                    ( listToMaybe, fromJust, fromMaybe, isNothing, isJust )
 import Data.Text                                     ( Text )
@@ -462,19 +461,17 @@ insertTransaction nodeId commitId batchIndex upMethod upResource upPayload downM
   where
     timestamp = fromIntegral ts
 
-addToTransactionRange :: Key Transaction -> Key Node -> SqlT (Maybe (Key Range))
-addToTransactionRange transactionId nodeId = do
-    maybeNode <- selectNodeById nodeId
-    case maybeNode of
-      Nothing -> return Nothing
-      Just node -> do
-        let nodeKey = entityKey node
-        liftM Just $ insert $ Range transactionId nodeKey
-
-addToTransactionRange_ :: [Key Transaction] -> Key Node -> SqlT ()
-addToTransactionRange_ transactions nodeId = insertMany_ vals
-  where 
-    vals = [ Range transactionId nodeId | transactionId <- transactions ]
+addToTransactionRange :: [Key Transaction] -> Key Node -> SqlT ()
+addToTransactionRange transactions nodeId = do
+    existing <- query
+    let fresh = transactions \\ (unValue <$> existing)
+    insertMany_ [ Range transactionId nodeId | transactionId <- fresh ]
+  where
+    query :: SqlT [Value (Key Transaction)]
+    query = select $ from $ 
+        \range -> do
+            where_ $ range ^. RangeTransactionId `in_` valList transactions &&. range ^. RangeNodeId ==. val nodeId
+            return (range ^. RangeTransactionId)
 
 type Delete a = SqlExpr (Entity a) -> SqlQuery ()
 
@@ -558,8 +555,7 @@ getMaxCommitId :: SqlT Int
 getMaxCommitId = do
     maxId <- select $ from $ \transaction -> do
         limit 1
-        let maxId = max_ (transaction ^. TransactionCommitId)
-        return maxId
+        return $ max_ (transaction ^. TransactionCommitId)
     return $ case maxId of
       [Value (Just v)] -> v
       _ -> 0

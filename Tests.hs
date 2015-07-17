@@ -55,113 +55,113 @@ main = do
 
     -------------------------------------------------------------
     
-    let body = Object $ MapS.fromList 
-            [ ("name"     , String "test")
-            , ("type"     , String "device")
-            , ("locked"   , Bool True)
-            , ("password" , String "hello") ]
-
-    initReq <- parseUrl "http://localhost:3333/nodes"
-    let req = initReq 
-                { method = "POST" 
-                , requestBody = RequestBodyLBS $ encode body 
-                , checkStatus = check
-                }
-    let req' = applyBasicAuth "root" "root" req
-
-    node1Id <- withResponse req' manager $ \response -> do
-        let bodyReader = responseBody response
-        body <- bodyReader
-        let Object obj = fromJust $ decode (BL.fromStrict body)
-        testAssert (MapS.lookup "status" obj == Just (String "success")) "Test 2" "Expected response object having key status == 'success'."
-
-        case extractPayload body of
-          Nothing -> error "Test 2.1: Unexpected response."
-          Just obj -> do
-            let Number n = fromJust $ MapS.lookup "id" obj
-            return $ coefficient n
-
-    print "-------------------------------------------------------------"
-
-    -------------------------------------------------------------
-
-    let body = Object $ MapS.fromList 
-            [ ("name"     , String "test-2")
-            , ("type"     , String "device")
-            , ("locked"   , Bool True)
-            , ("password" , String "hello") ]
-
-    initReq <- parseUrl "http://localhost:3333/nodes"
-    let req = initReq 
-                { method = "POST" 
-                , requestBody = RequestBodyLBS $ encode body 
-                , checkStatus = check
-                }
-    let req' = applyBasicAuth "root" "root" req
-
-    node2Id <- withResponse req' manager $ \response -> do
-        let bodyReader = responseBody response
-        body <- bodyReader
-        case extractPayload body of
-          Nothing -> error "Test 2.1: Unexpected response."
-          Just obj -> do
-            let Number n = fromJust $ MapS.lookup "id" obj
-            return $ coefficient n
-
-
-    print "-------------------------------------------------------------"
-
-    -------------------------------------------------------------
-    
-    let body = Object $ MapS.fromList 
-            [ ("name"     , String "test-3")
-            , ("type"     , String "device")
-            , ("locked"   , Bool True)
-            , ("password" , String "hello") ]
-
-    initReq <- parseUrl "http://localhost:3333/nodes"
-    let req = initReq 
-                { method = "POST" 
-                , requestBody = RequestBodyLBS $ encode body 
-                , checkStatus = check
-                }
-    let req' = applyBasicAuth "root" "root" req
-
-    node3Id <- withResponse req' manager $ \response -> do
-        let bodyReader = responseBody response
-        body <- bodyReader
-        case extractPayload body of
-          Nothing -> error "Test 2.1: Unexpected response."
-          Just obj -> do
-            let Number n = fromJust $ MapS.lookup "id" obj
-            return $ coefficient n
-
-
-    print "-------------------------------------------------------------"
-
-    -------------------------------------------------------------
-
-    let body = Object $ MapS.fromList 
-            [ ("name"     , String "test")
-            , ("type"     , String "device")
-            , ("locked"   , Bool True)
-            , ("password" , String "hello") ]
-
-    initReq <- parseUrl "http://localhost:3333/nodes"
-    let req = initReq 
-                { method      = "POST" 
-                , requestBody = RequestBodyLBS $ encode body 
-                , checkStatus = check
-                }
-    let req' = applyBasicAuth "root" "root" req
-
-    withResponse req' manager $ \response -> do
-        let bodyReader = responseBody response
-        let respStatus = responseStatus response
-        body <- bodyReader
-        let Object obj = fromJust $ decode (BL.fromStrict body)
-        testAssert (MapS.lookup "error" obj == Just (String "CONFLICT")) "Test 3" $ "Expected response object having key error == 'CONFLICT'."
-        testAssert (respStatus == status409) "Test 4" $ "Expected response status 409, instead got " ++ show respStatus
+--     let body = Object $ MapS.fromList 
+--             [ ("name"     , String "test")
+--             , ("type"     , String "device")
+--             , ("locked"   , Bool True)
+--             , ("password" , String "hello") ]
+-- 
+--     initReq <- parseUrl "http://localhost:3333/nodes"
+--     let req = initReq 
+--                 { method = "POST" 
+--                 , requestBody = RequestBodyLBS $ encode body 
+--                 , checkStatus = check
+--                 }
+--     let req' = applyBasicAuth "root" "root" req
+-- 
+--     node1Id <- withResponse req' manager $ \response -> do
+--         let bodyReader = responseBody response
+--         body <- bodyReader
+--         let Object obj = fromJust $ decode (BL.fromStrict body)
+--         testAssert (MapS.lookup "status" obj == Just (String "success")) "Test 2" "Expected response object having key status == 'success'."
+-- 
+--         case extractPayload body of
+--           Nothing -> error "Test 2.1: Unexpected response."
+--           Just obj -> do
+--             let Number n = fromJust $ MapS.lookup "id" obj
+--             return $ coefficient n
+-- 
+--     print "-------------------------------------------------------------"
+-- 
+--     -------------------------------------------------------------
+-- 
+--     let body = Object $ MapS.fromList 
+--             [ ("name"     , String "test-2")
+--             , ("type"     , String "device")
+--             , ("locked"   , Bool True)
+--             , ("password" , String "hello") ]
+-- 
+--     initReq <- parseUrl "http://localhost:3333/nodes"
+--     let req = initReq 
+--                 { method = "POST" 
+--                 , requestBody = RequestBodyLBS $ encode body 
+--                 , checkStatus = check
+--                 }
+--     let req' = applyBasicAuth "root" "root" req
+-- 
+--     node2Id <- withResponse req' manager $ \response -> do
+--         let bodyReader = responseBody response
+--         body <- bodyReader
+--         case extractPayload body of
+--           Nothing -> error "Test 2.1: Unexpected response."
+--           Just obj -> do
+--             let Number n = fromJust $ MapS.lookup "id" obj
+--             return $ coefficient n
+-- 
+-- 
+--     print "-------------------------------------------------------------"
+-- 
+--     -------------------------------------------------------------
+--     
+--     let body = Object $ MapS.fromList 
+--             [ ("name"     , String "test-3")
+--             , ("type"     , String "device")
+--             , ("locked"   , Bool True)
+--             , ("password" , String "hello") ]
+-- 
+--     initReq <- parseUrl "http://localhost:3333/nodes"
+--     let req = initReq 
+--                 { method = "POST" 
+--                 , requestBody = RequestBodyLBS $ encode body 
+--                 , checkStatus = check
+--                 }
+--     let req' = applyBasicAuth "root" "root" req
+-- 
+--     node3Id <- withResponse req' manager $ \response -> do
+--         let bodyReader = responseBody response
+--         body <- bodyReader
+--         case extractPayload body of
+--           Nothing -> error "Test 2.1: Unexpected response."
+--           Just obj -> do
+--             let Number n = fromJust $ MapS.lookup "id" obj
+--             return $ coefficient n
+-- 
+-- 
+--     print "-------------------------------------------------------------"
+-- 
+--     -------------------------------------------------------------
+-- 
+--     let body = Object $ MapS.fromList 
+--             [ ("name"     , String "test")
+--             , ("type"     , String "device")
+--             , ("locked"   , Bool True)
+--             , ("password" , String "hello") ]
+-- 
+--     initReq <- parseUrl "http://localhost:3333/nodes"
+--     let req = initReq 
+--                 { method      = "POST" 
+--                 , requestBody = RequestBodyLBS $ encode body 
+--                 , checkStatus = check
+--                 }
+--     let req' = applyBasicAuth "root" "root" req
+-- 
+--     withResponse req' manager $ \response -> do
+--         let bodyReader = responseBody response
+--         let respStatus = responseStatus response
+--         body <- bodyReader
+--         let Object obj = fromJust $ decode (BL.fromStrict body)
+--         testAssert (MapS.lookup "error" obj == Just (String "CONFLICT")) "Test 3" $ "Expected response object having key error == 'CONFLICT'."
+--         testAssert (respStatus == status409) "Test 4" $ "Expected response status 409, instead got " ++ show respStatus
 
 
     print "-------------------------------------------------------------"
@@ -303,26 +303,42 @@ main = do
 
     -------------------------------------------------------------
     
-    -- set node sync targets for node 'test'
-
-    let body = Object $ MapS.fromList [ ("targets"  , Array $ Vect.fromList ["test-2", "test-3"]) ]
-
-    initReq <- parseUrl $ "http://localhost:3333/nodes/" ++ show node1Id 
-    let req = initReq 
-                { method = "PUT" 
-                , requestBody = RequestBodyLBS $ encode body 
-                , checkStatus = check
-                }
-    let req' = applyBasicAuth "test" "hello" req
-
-    withResponse req' manager $ \response -> do
-        let bodyReader = responseBody response
-        body <- bodyReader
-        let Object obj = fromJust $ decode (BL.fromStrict body)
-        testAssert (MapS.lookup "status" obj == Just (String "success")) "Test 9" 
-            "Expected response object having key status == 'success'."
+--    -- set node sync targets for node 'test'
+--
+--    let body = Object $ MapS.fromList [ ("targets"  , Array $ Vect.fromList ["test-2", "test-3"]) ]
+--
+--    initReq <- parseUrl $ "http://localhost:3333/nodes/" ++ show node1Id 
+--    let req = initReq 
+--                { method = "PUT" 
+--                , requestBody = RequestBodyLBS $ encode body 
+--                , checkStatus = check
+--                }
+--    let req' = applyBasicAuth "test" "hello" req
+--
+--    withResponse req' manager $ \response -> do
+--        let bodyReader = responseBody response
+--        body <- bodyReader
+--        let Object obj = fromJust $ decode (BL.fromStrict body)
+--        testAssert (MapS.lookup "status" obj == Just (String "success")) "Test 9" 
+--            "Expected response object having key status == 'success'."
 
     -------------------------------------------------------------
+
+--    let body = Object $ MapS.fromList [ ("targets"  , Array $ Vect.fromList ["root", "test", "test-2", "test-3"]) ]
+--
+--    initReq <- parseUrl $ "http://localhost:3333/nodes/" ++ show node1Id
+--    let req = initReq 
+--                { method = "PUT" 
+--                , requestBody = RequestBodyLBS $ encode body 
+--                , checkStatus = check
+--                }
+--    let req' = applyBasicAuth "test-2" "hello" req
+--
+--    withResponse req' manager $ \response -> do
+--        return ()
+
+    -------------------------------------------------------------
+
 
     r <- runSync 
              manager
@@ -385,23 +401,23 @@ main = do
 
     -- set node sync targets for node 'test-2'
 
-    let body = Object $ MapS.fromList [ ("targets"  , Array $ Vect.fromList ["test", "test-3"]) ]
-
-    initReq <- parseUrl $ "http://localhost:3333/nodes/" ++ show node2Id
-    let req = initReq 
-                { method = "PUT" 
-                , requestBody = RequestBodyLBS $ encode body 
-                , checkStatus = check
-                }
-    let req' = applyBasicAuth "test-2" "hello" req
-
-    withResponse req' manager $ \response -> do
-        let bodyReader = responseBody response
-        body <- bodyReader
-        let Object obj = fromJust $ decode (BL.fromStrict body)
-        testAssert (MapS.lookup "status" obj == Just (String "success")) "Test 11" 
-            "Expected response object having key status == 'success'."
-
+--    let body = Object $ MapS.fromList [ ("targets"  , Array $ Vect.fromList ["test", "test-3"]) ]
+--
+--    initReq <- parseUrl $ "http://localhost:3333/nodes/" ++ show node2Id
+--    let req = initReq 
+--                { method = "PUT" 
+--                , requestBody = RequestBodyLBS $ encode body 
+--                , checkStatus = check
+--                }
+--    let req' = applyBasicAuth "test-2" "hello" req
+--
+--    withResponse req' manager $ \response -> do
+--        let bodyReader = responseBody response
+--        body <- bodyReader
+--        let Object obj = fromJust $ decode (BL.fromStrict body)
+--        testAssert (MapS.lookup "status" obj == Just (String "success")) "Test 11" 
+--            "Expected response object having key status == 'success'."
+--
     -------------------------------------------------------------
 
 --    initReq <- parseUrl $ "http://localhost:3333/nodes/" 

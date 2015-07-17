@@ -181,22 +181,22 @@ runTests = do
         t15 <- liftA fromJust $ insertTransaction nodeB 5 1 "" "" "" "" "" "" (Timestamp 210)
         t16 <- liftA fromJust $ insertTransaction nodeB 5 2 "" "" "" "" "" "" (Timestamp 390)
 
-        addToTransactionRange t1 nodeB
-        addToTransactionRange t1 nodeC
+        addToTransactionRange [t1] nodeB
+        addToTransactionRange [t1] nodeC
 
-        addToTransactionRange t2 nodeB
-        addToTransactionRange t2 nodeC
+        addToTransactionRange [t2] nodeB
+        addToTransactionRange [t2] nodeC
 
-        addToTransactionRange t3 nodeB
-        addToTransactionRange t3 nodeC
+        addToTransactionRange [t3] nodeB
+        addToTransactionRange [t3] nodeC
 
-        addToTransactionRange t5 nodeA
-        addToTransactionRange t5 nodeC
-        addToTransactionRange t5 nodeD
+        addToTransactionRange [t5] nodeA
+        addToTransactionRange [t5] nodeC
+        addToTransactionRange [t5] nodeD
 
-        addToTransactionRange t6 nodeA
-        addToTransactionRange t6 nodeC
-        addToTransactionRange t6 nodeD
+        addToTransactionRange [t6] nodeA
+        addToTransactionRange [t6] nodeC
+        addToTransactionRange [t6] nodeD
 
         -----------------------------------------------
 

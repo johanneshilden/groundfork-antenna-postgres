@@ -37,7 +37,7 @@ processSyncRequest node SyncRequest{..} = do
             updated <- Db.updateTimestamp (takeMin reqSyncLog) 
             liftIO $ print updated
             -- Broadcast websocket notifications
-            forM_ updated $ \_node -> when (_node /= node ^. name) $ do
+            forM_ updated $ \_node -> when (_node /= node ^. name) $ 
                 liftIO $ publishMsg (state ^. channel) "antenna" "" $ newMsg 
                     { msgBody = BL.fromStrict (encodeUtf8 _node)
                     , msgDeliveryMode = Just Persistent }
@@ -64,18 +64,18 @@ processSyncRequest node SyncRequest{..} = do
         -- Collect transactions for which the range includes the source node or a candidate target 
         let targets = cons sourceKey candidateTargets
 
-        Db.addToTransactionRange_ transactionIds sourceKey
+        Db.addToTransactionRange transactionIds sourceKey
 
         forwardActions <- Db.getForwardActions targets tstamp
 
         let keys = (Db.toKey . _transactionId <$> forwardActions) \\ transactionIds
-        Db.addToTransactionRange_ keys sourceKey
+        Db.addToTransactionRange keys sourceKey
 
         -- Virtual nodes
         let virtualNodes = filter (\t -> "virtual" == Db.nodeFamily (entityVal t)) candidates
 
         forM_ virtualNodes $ \_node -> 
-            Db.addToTransactionRange_ transactionIds (entityKey _node)
+            Db.addToTransactionRange transactionIds (entityKey _node)
  
         -- Update sync point for source node
         sp <- Db.setNodeSyncPoint sourceKey
