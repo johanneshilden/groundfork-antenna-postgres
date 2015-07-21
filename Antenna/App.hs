@@ -20,6 +20,7 @@ import Network.Wai.Handler.Warp
 import System.Posix.Env
 import System.Posix.Signals              
 import Web.Simple
+import Web.Hashids
 import Web.Heroku
 import Web.Heroku.RabbitMQ
 
@@ -48,8 +49,9 @@ appSetup = do
     declareExchange chan newExchange { exchangeName = "antenna", exchangeType = "fanout" }
     bindQueue chan "default" "antenna" ""
 
-    let state = AppState pool (makeSalt "Mxg4YN0OaE3xaehmg3up") chan
-    let settings = defaultSettings & setPort port
+    let salt     = "Mxg4YN0OaE3xaehmg3up"
+        state    = AppState pool (makeSalt salt) chan (hashidsSimple salt)
+        settings = defaultSettings & setPort port
                                    & setInstallShutdownHandler (void . signalHandlers)
     return (state, settings)
   where

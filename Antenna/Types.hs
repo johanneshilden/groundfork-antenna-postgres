@@ -17,6 +17,7 @@ import Data.Text                                     ( Text, pack )
 import Data.Typeable
 import Database.Persist.Sql
 import Web.Simple
+import Web.Hashids                                   ( HashidsContext )
 
 import Network.HTTP.Types                     hiding ( Method, GET, PUT, POST, DELETE, PATCH )
 
@@ -153,6 +154,7 @@ data AppState = AppState
     { _sqlPool :: ConnectionPool 
     , _salt    :: Salt 
     , _channel :: AMQP.Channel
+    , _hashids :: HashidsContext
     } 
 
 $(makeLenses ''AppState)

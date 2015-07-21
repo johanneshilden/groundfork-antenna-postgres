@@ -18,13 +18,16 @@ import Database.Esqueleto                            ( Key, unValue, entityKey, 
 import Database.Persist                              ( insertMany )
 import Network.AMQP                                  ( DeliveryMode(..), Message(..), newMsg, publishMsg )
 import Network.HTTP.Types
+import Text.Read                                     ( readMaybe ) 
 import Web.Simple
+import Web.Hashids                                   ( HashidsContext )
 
 import qualified Antenna.Db.Schema                as Db
 import qualified Data.ByteString.Lazy             as BL
 import qualified Data.HashMap.Strict              as MapS
 import qualified Data.Text                        as Text
 import qualified Text.Show.Text                   as Text
+import qualified Web.Hashids                      as Hashids
 
 processSyncRequest :: Node -> SyncRequest -> AppController ()
 processSyncRequest node SyncRequest{..} = do
@@ -56,7 +59,7 @@ processSyncRequest node SyncRequest{..} = do
         commitId <- Db.getMaxCommitId
 
         -- Insert commited transactions and annote transactions with the commit id 
-        transactionIds <- insertMany $ translate sourceKey (succ commitId) <$> reqSyncLog
+        transactionIds <- insertMany $ translate (state ^. hashids) sourceKey (succ commitId) <$> reqSyncLog
 
         candidates <- Db.selectNodeCollection reqSyncTargets (Db.toKey <$> node ^. targets)
         let candidateTargets = entityKey <$> candidates
@@ -90,19 +93,19 @@ processSyncRequest node SyncRequest{..} = do
 
     respondWith status200 (toJSON response)
 
-translate :: Key Db.Node -> Int -> Transaction -> Db.Transaction
-translate nodeId commitId Transaction{..} = 
+translate :: HashidsContext -> Key Db.Node -> Int -> Transaction -> Db.Transaction
+translate hashids nodeId commitId Transaction{..} = 
     Db.Transaction
         nodeId
         commitId
         _batchIndex
         -- Up action
         (_upAction   ^. method   & toJSON & showMethod)
-        (_upAction   ^. resource & replace_ commitId)
+        (_upAction   ^. resource & replace_ hashids commitId)
         (_upAction   ^. payload  & encoded)
         -- Down action
         (_downAction ^. method   & toJSON & showMethod)
-        (_downAction ^. resource & replace_ commitId)
+        (_downAction ^. resource & replace_ hashids commitId)
         (_downAction ^. payload  & encoded)
         -- Timestamp
         (fromIntegral ts)
@@ -111,27 +114,30 @@ translate nodeId commitId Transaction{..} =
     showMethod (String mtd) = mtd
     showMethod ____________ = ""
     encoded Nothing = ""
-    encoded (Just cmd) = decodeUtf8 $ BL.toStrict $ encode $ updObj commitId cmd
+    encoded (Just cmd) = decodeUtf8 $ BL.toStrict $ encode $ updObj hashids commitId cmd
 
 takeMin :: [Transaction] -> Int
 takeMin ts = fromIntegral t
   where
     (Timestamp t) = minimum $ map _timestamp ts
 
-updObj :: Int -> Value -> Value
-updObj commitId (Object o) = Object (MapS.mapWithKey deep o)
+updObj :: HashidsContext -> Int -> Value -> Value
+updObj hashids commitId (Object o) = Object (MapS.mapWithKey deep o)
   where
-    deep "href" (String val) = String (replace_ commitId val)
-    deep _ o = updObj commitId o
-updObj _ o = o
+    deep "href" (String val) = String (replace_ hashids commitId val)
+    deep _ o = updObj hashids commitId o
+updObj _ _ o = o
 
-replace_ :: Text.Show a => a -> Text -> Text
-replace_ commitId txt = splitOn "||" txt & zipWith (curry go) [1 .. ] & Text.concat 
+replace_ :: HashidsContext -> Int -> Text -> Text
+replace_ hashids commitId txt = splitOn "||" txt & zipWith (curry go) [1 .. ] & Text.concat 
   where
-    go (i, p) | odd i     = p
+    go (n, p) | odd n     = p
               | otherwise = 
                  case splitOn "/" p of
-                   [_, i] | "-" `isInfixOf` i -> p
-                   [r, i] -> r <> "/id_" <> Text.show commitId <> "-" <> i 
+                   [_, i] | "_" `isInfixOf` i -> p
+                   [r, i] -> 
+                        case readMaybe (Text.unpack i) of
+                          Just j -> r <> "/_" <> decodeUtf8 (Hashids.encodeList hashids [commitId, j]) 
+                          Nothing -> p
                    ______ -> p
 
