@@ -21,6 +21,7 @@ import Web.Hashids                                   ( HashidsContext )
 
 import Network.HTTP.Types                     hiding ( Method, GET, PUT, POST, DELETE, PATCH )
 
+import qualified Data.HashMap.Strict              as HMS
 import qualified Network.AMQP                     as AMQP
 
 data NodeType 
@@ -253,4 +254,7 @@ instance ToJSON SyncResponse where
         , "forward"   .= respForward
         , "syncPoint" .= respSyncPoint 
         , "status"    .= String "success" ]
+
+okObj :: [(Text, Value)] -> OkResponse
+okObj = okResponse . HMS.fromList 
 

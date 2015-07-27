@@ -103,6 +103,12 @@ controller = do
               Just o -> processSyncRequest node o
               ______ -> respondWith status400 (JsonError "BAD_REQUEST")
 
+        get "syncpoint" $ do
+            let nodeKey = toKey (node ^. nodeId )
+            p <- runQuery (getNodeSyncPoint nodeKey)
+            respondWith status200 $ okObj 
+                [ ("syncPoint", toJSON p) ]
+
         get "log" $ do
             page <- liftA (numeric  1) (queryParam "page")
             size <- liftA (numeric 25) (queryParam "size")

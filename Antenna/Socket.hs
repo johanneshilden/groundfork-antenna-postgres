@@ -7,7 +7,7 @@ import Control.Lens                                  ( (^.) )
 import Data.ByteString.Lazy                          ( toStrict )
 import Data.Text                                     ( Text )
 import Data.Text.Encoding                            ( decodeUtf8 )
-import Network.AMQP                                  ( Channel, Ack(..), DeliveryMode(..), Message(..), newMsg, publishMsg, consumeMsgs )
+import Network.AMQP                                  ( Channel, Ack(..), DeliveryMode(..), Message(..), newMsg, publishMsg, consumeMsgs, ackEnv )
 import Network.WebSockets
 
 listen :: Channel -> AppState -> Connection -> IO ()
@@ -23,7 +23,8 @@ wsApp state pending = do
     forkPingThread connection 5
     let chan = state ^. channel
     tag <- consumeMsgs chan "default" Ack $ 
-        \(msg, _) -> 
+        \(msg, env) -> 
             sendTextData connection (msgBody msg)
+            >> ackEnv env
     listen chan state connection 
 
