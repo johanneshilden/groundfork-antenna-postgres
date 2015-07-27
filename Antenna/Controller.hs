@@ -103,7 +103,7 @@ controller = do
               Just o -> processSyncRequest node o
               ______ -> respondWith status400 (JsonError "BAD_REQUEST")
 
-        get "syncpoint" $ do
+        get "sp" $ do
             let nodeKey = toKey (node ^. nodeId )
             p <- runQuery (getNodeSyncPoint nodeKey)
             respondWith status200 $ okObj 
