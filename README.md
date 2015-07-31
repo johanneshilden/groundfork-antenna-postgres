@@ -27,18 +27,18 @@ $ curl --user root:root http://localhost:3333/nodes
 
 #### POST /nodes
 
-| Property      | Type          |                            |   
+| Property      | Type          | Extra                      |   
 | ------------- |---------------|----------------------------| 
 | name          | string        |                            |
 | type          | string        | 'device' &#124; 'virtual'  |
-| password
+| password      | string        | Applies to device nodes only. |
 | locked        | boolean       |                            |
 
 ```bash
 $ curl --user root:root \
     -X POST \
     -H "Content-Type: application/json" \
-    -d '{"name":"my-new-node","type":"virtual","locked":false}' \
+    -d '{"name":"virtual-1","type":"virtual","locked":false}' \
     http://localhost:3333/nodes  
 ```
 
