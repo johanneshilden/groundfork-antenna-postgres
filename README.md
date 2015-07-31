@@ -3,19 +3,23 @@
 #### GET /log
 
 ```
-$ curl http://localhost:3333/log --user root:root
+$ curl --user root:root http://localhost:3333/log 
+```
+
+```
+$ curl -G --user root:root http://localhost:3333/log --data-urlencode page=1 --data-urlencode size=15
 ```
 
 #### POST /log/reset
 
 ```
-$ curl http://localhost:3333/log/reset -X POST --user root:root
+$ curl --user root:root -X POST http://localhost:3333/log/reset  
 ```
 
 #### GET /nodes
 
 ```
-$ curl http://localhost:3333/nodes --user root:root 
+$ curl --user root:root http://localhost:3333/nodes
 ```
 
 #### POST /nodes
@@ -36,7 +40,7 @@ Pong!
 #### GET /sp
 
 ```
-$ curl http://localhost:3333/sp --user root:root
+$ curl --user root:root http://localhost:3333/sp 
 ```
 
 ```json
