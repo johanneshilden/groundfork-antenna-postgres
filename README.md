@@ -58,6 +58,9 @@ $ curl --user root:root \
 
 ```bash
 $ curl http://localhost:3333/ping
+```
+
+```
 Pong!
 ```
 
