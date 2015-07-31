@@ -46,7 +46,7 @@ $ curl --user root:root http://localhost:3333/sp
 ```json
 {
    "status"  : "success",
-   "message" :"OK",
+   "message" : "OK",
    "body"    : {
       "syncPoint" : 1438174179
    }
