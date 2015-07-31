@@ -7,7 +7,9 @@ $ curl --user root:root http://localhost:3333/log
 ```
 
 ```
-$ curl -G --user root:root http://localhost:3333/log --data-urlencode page=1 --data-urlencode size=15
+$ curl -G --user root:root http://localhost:3333/log \
+    --data-urlencode page=1 \
+    --data-urlencode size=15
 ```
 
 #### POST /log/reset
@@ -32,11 +34,17 @@ $ curl --user root:root http://localhost:3333/nodes
 | locked        | boolean       |                            |
 
 ```
-$ curl --user root:root -X POST -H "Content-Type: application/json" http://localhost:3333/nodes -d '{"name":"my-new-node","type":"virtual","locked":false}' 
+$ curl --user root:root -X POST \
+    -H "Content-Type: application/json" \
+    -d '{"name":"my-new-node","type":"virtual","locked":false}' \
+    http://localhost:3333/nodes  
 ```
 
 ```
-curl --user root:root -X POST -H "Content-Type: application/json" http://localhost:3333/nodes -d '{"name":"device-1","password":"pass","type":"device","locked":false}'" 
+$ curl --user root:root -X POST \
+    -H "Content-Type: application/json" \
+    -d '{"name":"device-1","password":"pass","type":"device","locked":false}' \
+    http://localhost:3333/nodes 
 ```
 
 #### PUT /nodes/:id
