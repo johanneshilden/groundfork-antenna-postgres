@@ -2,19 +2,19 @@
 
 #### GET /log
 
-### POST /log/reset
+#### POST /log/reset
 
-### GET /nodes
+#### GET /nodes
 
-### POST /nodes
+#### POST /nodes
 
-### PUT /nodes/:id
+#### PUT /nodes/:id
 
-### DELETE /nodes/:id
+#### DELETE /nodes/:id
 
-### GET /ping
+#### GET /ping
 
-### GET /sp
+#### GET /sp
 
-### POST /sync
+#### POST /sync
 
