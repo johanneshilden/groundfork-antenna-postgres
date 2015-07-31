@@ -1,6 +1,6 @@
 # groundfork-antenna-postgres
 
-### GET /log
+#### GET /log
 
 ### POST /log/reset
 
