@@ -27,7 +27,7 @@ $ curl --user root:root http://localhost:3333/nodes
 | Property      | Type          |                       |   
 | ------------- |---------------|-----------------------| 
 | name          | string        |                       |
-| type          | string        | 'device' &pipe; 'virtual'  |
+| type          | string        | 'device' &#124; 'virtual'  |
 
 #### PUT /nodes/:id
 
