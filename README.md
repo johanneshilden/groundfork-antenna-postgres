@@ -8,9 +8,10 @@ $ curl --user root:root http://localhost:3333/log
 
 ```bash
 $ curl -G \
-    --user root:root http://localhost:3333/log \
+    --user root:root \
     --data-urlencode page=1 \
-    --data-urlencode size=15
+    --data-urlencode size=15 \
+    http://localhost:3333/log
 ```
 
 #### POST /log/reset
