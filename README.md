@@ -52,7 +52,19 @@ $ curl --user root:root \
 
 #### PUT /nodes/:id
 
+```
+$ curl --user root:root \ 
+     -X PUT \
+     -H "Content-Type: application/json" \
+     -d '{"name":"new-name"}' \
+     http://localhost:3333/nodes/3215
+```
+
 #### DELETE /nodes/:id
+
+```bash
+$ curl --user root:root -X DELETE http://localhost:3333/nodes/3216
+```
 
 #### GET /ping
 
