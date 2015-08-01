@@ -112,11 +112,14 @@ controller = do
         get "log" $ do
             page <- liftA (numeric  1) (queryParam "page")
             size <- liftA (numeric 25) (queryParam "size")
-            let offs = (page - 1) * size
-            transactions <- runQuery $ getTransactionsPage offs size
-            total <- runQuery getTransactionCount 
-            let collection = Collection (length transactions) total (Payload "transactions" transactions)
-            respondWith status200 collection
+            if (page < 1 || size < 1)
+                then respondWith status400 (JsonError "BAD_REQUEST")
+                else do
+                    let offs = (page - 1) * size
+                    transactions <- runQuery $ getTransactionsPage offs size
+                    total <- runQuery getTransactionCount 
+                    let collection = Collection (length transactions) total (Payload "transactions" transactions)
+                    respondWith status200 collection
 
         post "log/reset" $ do
             runQuery deleteAllTransactions
@@ -156,7 +159,8 @@ processUpdateNode :: Int -> HashMap Text Value -> AppController ()
 processUpdateNode nodeId object = do
     app <- controllerState
     let nodeTargets = over (_Just . traverse) (^.._Number) targets <&> join . Vect.toList
-        node = UpdateNode nodeName nodePass (toInt nodeTargets)
+        secret = makePwd <$> nodePass <*> Just (app ^. salt)
+        node = UpdateNode nodeName secret (toInt nodeTargets)
     response <- liftIO . runDb (app ^. sqlPool) $ updateNode (toKey nodeId) node
     case response of
       UpdateNotFound -> respondWith status404 (JsonError "NOT_FOUND")
