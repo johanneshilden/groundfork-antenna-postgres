@@ -100,3 +100,60 @@ $ curl --user root:root http://localhost:3333/sp
 ```
 
 #### POST /sync
+
+```bash 
+$ cat request.json
+```
+
+```json
+{
+    "targets": ["root"],
+    "syncPoint": 0,
+    "commit": [ 
+        { 
+            "up": { 
+                "method": "POST", 
+                "resource": "posts", 
+                "payload": {
+                    "title": "My first post",
+                    "body": "In omnium maluisset eum, per putent singulis tincidunt id.",
+                    "user": "bob"
+                }
+            }, 
+            "down": { 
+                "method": "DELETE", 
+                "resource": "posts/1" 
+            },                   
+            "index": 1,                                                         
+            "timestamp": 1438388891 
+        } 
+    ] 
+}
+```
+
+```bash
+$ curl --user root:root \
+     -X POST \ 
+     -H "Content-Type: application/json" \
+     -d @request.json \
+     http://localhost:3333/sync 
+```
+
+```json
+{
+    "status": "success",
+    "forward": [
+        {
+            "payload": {
+                "body": "In omnium maluisset eum, per putent singulis tincidunt id.",
+                "user": "bob",
+                "title": "My first post"
+            },
+            "method": "POST",
+            "resource": "posts"
+        }
+    ],
+    "reverse": [],
+    "syncPoint": "*"
+}
+```
