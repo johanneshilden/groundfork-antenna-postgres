@@ -123,12 +123,15 @@ $ cat request.json
                 "payload": {
                     "title": "My first post",
                     "body": "In omnium maluisset eum, per putent singulis tincidunt id.",
-                    "user": "bob"
+                    "user": "bob",
+                    "_links": {
+                        "self": { "href": "||posts/1||" }
+                    }
                 }
             }, 
             "down": { 
                 "method": "DELETE", 
-                "resource": "posts/1" 
+                "resource": "||posts/1||" 
             },                   
             "index": 1,                                                         
             "timestamp": 1438388891 
@@ -153,6 +156,9 @@ $ curl --user root:root \
             "payload": {
                 "body": "In omnium maluisset eum, per putent singulis tincidunt id.",
                 "user": "bob",
+                "_links": {
+                    "self": { "href": "posts/_2zsB" }
+                },
                 "title": "My first post"
             },
             "method": "POST",
