@@ -101,6 +101,12 @@ $ curl --user root:root http://localhost:3333/sp
 
 #### POST /sync
 
+| Property      | Type          | Extra                      |   
+| ------------- |---------------|----------------------------| 
+| targets       | array         |                            |
+| syncPoint     | string | number | A timestamp, or '*'.     |
+| commit        | array         | Action log.                |
+
 ```bash 
 $ cat request.json
 ```
