@@ -104,7 +104,7 @@ $ curl --user root:root http://localhost:3333/sp
 | Property      | Type          | Extra                      |   
 | ------------- |---------------|----------------------------| 
 | targets       | array         |                            |
-| syncPoint     | string | number | A timestamp, or '*'.     |
+| syncPoint     | string &#124; number | A timestamp, or '*'.     |
 | commit        | array         | Action log.                |
 
 ```bash 
