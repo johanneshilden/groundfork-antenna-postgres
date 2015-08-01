@@ -52,6 +52,12 @@ $ curl --user root:root \
 
 #### PUT /nodes/:id
 
+| Property      | Type          | Extra                      |   
+| ------------- |---------------|----------------------------| 
+| name          | string        |                            |
+| password      | string        | Applies to device nodes only. |
+| locked        | boolean       |                            |
+
 ```
 $ curl --user root:root \ 
      -X PUT \
